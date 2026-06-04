@@ -507,7 +507,6 @@ setInterval(function(){
   document.getElementById('clk').textContent=
     [j.getHours(),j.getMinutes(),j.getSeconds()].map(function(v){return String(v).padStart(2,'0')}).join(':')+' JST';
 },1000);
-renderQsTags();
 
 // ── HELPERS ──────────────────────────────────────
 function setLdg(t,s){document.getElementById('ldgTxt').textContent=t||'';document.getElementById('ldgSub').textContent=s||'';}
@@ -549,6 +548,7 @@ function addQsTag(){
   if(!arr.includes(code)){arr.push(code);qsSave(arr);}
   renderQsTags();
 }
+renderQsTags();
 function showErr(msg){var el=document.getElementById('errmsg');el.className='errmsg';el.textContent='⚠ '+msg;el.style.display='block';}
 function hideErr(){document.getElementById('errmsg').style.display='none';}
 function show(id){var el=document.getElementById(id);if(el)el.style.display='block';}

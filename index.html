@@ -664,6 +664,24 @@ async function analyze(){
     var curVol=volumes[last],volR=avgVol>0?curVol/avgVol:1;
     var rHigh=Math.max.apply(null,highs.slice(-20)),rLow=Math.min.apply(null,lows.slice(-20));
 
+    // 新指標計算
+    var ichi=calcIchimoku(highs,lows,closes);
+    var ichiTenkan=ichi.tenkan[last],ichiKijun=ichi.kijun[last];
+    var ichiSA=ichi.senkouA[Math.max(0,last-26)],ichiSB=ichi.senkouB[Math.max(0,last-26)];
+    var cloudTop=ichiSA&&ichiSB?Math.max(ichiSA,ichiSB):null;
+    var cloudBot=ichiSA&&ichiSB?Math.min(ichiSA,ichiSB):null;
+    var adxData=calcADX(highs,lows,closes);
+    var adxV=adxData.adx,adxPDI=adxData.pdi,adxMDI=adxData.mdi;
+    var vwapV=calcVWAP(closes,highs,lows,volumes);
+    var obvArr=calcOBV(closes,volumes);
+    var obvNow=obvArr[last],obvPrev20=obvArr[Math.max(0,last-20)];
+    var obvTrend=obvNow>obvPrev20;
+    var swHi=Math.max.apply(null,highs.slice(-52));
+    var swLo=Math.min.apply(null,lows.slice(-52));
+    var fib=calcFibonacci(swHi,swLo);
+    var fibLevels=[{l:fib.r236,n:'23.6%'},{l:fib.r382,n:'38.2%'},{l:fib.r500,n:'50.0%'},{l:fib.r618,n:'61.8%'},{l:fib.r786,n:'78.6%'}];
+    var nearFib=fibLevels.reduce(function(best,f){var d=Math.abs(cur-f.l);return d<best.d?{d:d,f:f}:best;},{d:Infinity,f:null}).f;
+
     // ── SCORING ──
     var bull=0,bear=0,total=0,sigs=[];
     function add(name,sig,wt,detail,ico){
@@ -755,6 +773,43 @@ async function analyze(){
       add('S/Rライン',srS,2,srD,'🔵');
     }
 
+    // 一目均衡表
+    if(ichiTenkan&&ichiKijun&&cloudTop&&cloudBot){
+      var ichiS,ichiD;
+      if(cur>cloudTop&&ichiTenkan>ichiKijun){ichiS='buy';ichiD='雲の上かつ転換>基準 — 最強上昇シグナル';}
+      else if(cur<cloudBot&&ichiTenkan<ichiKijun){ichiS='sell';ichiD='雲の下かつ転換<基準 — 最強下降シグナル';}
+      else if(cur>cloudTop){ichiS='buy';ichiD='雲の上 — 上昇トレンド継続';}
+      else if(cur<cloudBot){ichiS='sell';ichiD='雲の下 — 下降トレンド';}
+      else{ichiS='sell';ichiD='雲の中 — トレンド転換期、方向不明';}
+      add('一目均衡表',ichiS,4,ichiD,'☁️');
+    }
+
+    // ADX
+    var adxS,adxD;
+    if(adxV>30){
+      adxS=adxPDI>adxMDI?'buy':'sell';
+      adxD='ADX='+adxV.toFixed(1)+' 強トレンド +DI='+adxPDI.toFixed(1)+' -DI='+adxMDI.toFixed(1);
+    } else if(adxV>20){
+      adxS=adxPDI>adxMDI?'buy':'sell';
+      adxD='ADX='+adxV.toFixed(1)+' トレンド発生中 +DI='+adxPDI.toFixed(1)+' -DI='+adxMDI.toFixed(1);
+    } else {
+      adxS='sell';adxD='ADX='+adxV.toFixed(1)+' レンジ相場（トレンド弱い）';
+    }
+    add('ADX',adxS,3,adxD,'📡');
+
+    // VWAP
+    var vwapS=cur>vwapV?'buy':'sell';
+    var vwapDiff=((cur-vwapV)/vwapV*100).toFixed(2);
+    add('VWAP',vwapS,2,'VWAP=¥'+fmt(vwapV,0)+(cur>vwapV?' 上回り（+'+vwapDiff+'%）機関水準超え':' 下回り（'+vwapDiff+'%）機関水準以下'),'💹');
+
+    // OBV
+    var obvS,obvD;
+    if(chgPct>0&&obvTrend){obvS='buy';obvD='OBV上昇+価格上昇 — 出来高がトレンドを確認';}
+    else if(chgPct<0&&!obvTrend){obvS='sell';obvD='OBV下落+価格下落 — 出来高が下落を確認';}
+    else if(chgPct>0&&!obvTrend){obvS='sell';obvD='価格上昇↑なのにOBV下落 — ダイバージェンス(反転注意)';}
+    else{obvS='buy';obvD='価格下落↓なのにOBV上昇 — ポジティブダイバージェンス(反転期待)';}
+    add('OBV',obvS,2,obvD,'📊');
+
     // ローソク足パターン
     var cPats=detectCandlePatterns(opens,highs,lows,closes);
     cPats.forEach(function(p){if(p.signal!=='neutral')add(p.name,p.signal,p.weight,p.desc,'🕯');});
@@ -843,6 +898,49 @@ async function analyze(){
     setInd('ma',fmt(sma5v,0),mas==='buy'?'上昇':mas==='sell'?'下降':'中立',mas==='buy'?'bullish':mas==='sell'?'bearish':'neutral','5MA:¥'+fmt(sma5v,0)+' 25MA:¥'+fmt(sma25v,0)+' 75MA:¥'+fmt(sma75v,0),sma25v?Math.min(Math.max(50+(cur-sma25v)/sma25v*200,5),95):50,mas==='buy'?'var(--green)':mas==='sell'?'var(--red)':'var(--blue)');
     var volDesc=volR>2&&chgPct>0?'出来高急増+上昇 '+volR.toFixed(1)+'x':volR>2&&chgPct<0?'出来高急増+下落 '+volR.toFixed(1)+'x':volR>1.5?'出来高増加 '+volR.toFixed(1)+'x':'通常出来高 '+volR.toFixed(1)+'x';
     setInd('vol',volR.toFixed(1)+'x',volR>1.5?'増加':volR<0.7?'減少':'通常',volR>1.5?'bullish':volR<0.7?'bearish':'neutral',volDesc,Math.min(volR*25,100),'var(--blue)');
+
+    // 新指標 UI更新
+    show('ic-ichimoku');
+    var ichiLabel,ichiCls;
+    if(!cloudTop){ichiLabel='データ不足';ichiCls='neutral';}
+    else if(cur>cloudTop&&ichiTenkan>ichiKijun){ichiLabel='最強買い';ichiCls='bullish';}
+    else if(cur>cloudTop){ichiLabel='雲の上';ichiCls='bullish';}
+    else if(cur<cloudBot&&ichiTenkan<ichiKijun){ichiLabel='最強売り';ichiCls='bearish';}
+    else if(cur<cloudBot){ichiLabel='雲の下';ichiCls='bearish';}
+    else{ichiLabel='雲の中';ichiCls='neutral';}
+    var ichiFill=cur>=(cloudTop||cur)?75:cur<=(cloudBot||cur)?25:50;
+    setInd('ichimoku',cloudTop?'¥'+fmt(cloudTop,0):'--',ichiLabel,ichiCls,
+      '転換線:¥'+fmt(ichiTenkan,0)+' 基準線:¥'+fmt(ichiKijun,0)+(cloudTop?' 雲上:¥'+fmt(cloudTop,0):''),
+      ichiFill,ichiCls==='bullish'?'var(--green)':ichiCls==='bearish'?'var(--red)':'var(--gold)');
+
+    show('ic-adx');
+    var adxCls=adxV>25?(adxPDI>adxMDI?'bullish':'bearish'):'neutral';
+    var adxLabel=adxV>30?'強トレンド':adxV>20?'トレンド発生':'レンジ';
+    setInd('adx',adxV.toFixed(1),adxLabel,adxCls,
+      '+DI='+adxPDI.toFixed(1)+' -DI='+adxMDI.toFixed(1)+(adxPDI>adxMDI?' (上昇優位)':' (下降優位)'),
+      Math.min(adxV*2,100),adxCls==='bullish'?'var(--green)':adxCls==='bearish'?'var(--red)':'var(--gold)');
+
+    show('ic-vwap');
+    var vwapCls=cur>vwapV?'bullish':'bearish';
+    setInd('vwap','¥'+fmt(vwapV,0),cur>vwapV?'買い優勢':'売り優勢',vwapCls,
+      'VWAP=¥'+fmt(vwapV,0)+' 現値'+(cur>vwapV?'+':'')+vwapDiff+'% '+(cur>vwapV?'機関水準超え':'機関水準以下'),
+      cur>vwapV?70:30,cur>vwapV?'var(--green)':'var(--red)');
+
+    show('ic-obv');
+    var obvLabel=obvTrend&&chgPct>0?'強気確認':!obvTrend&&chgPct<0?'弱気確認':chgPct>0&&!obvTrend?'ダイバージェンス':'ポジティブDiv';
+    var obvCls=obvS==='buy'?'bullish':obvS==='sell'?'bearish':'neutral';
+    var obvChange=((obvNow-obvPrev20)/Math.max(Math.abs(obvPrev20),1)*100);
+    setInd('obv',obvTrend?'↑上昇':'↓下落',obvLabel,obvCls,
+      '20日比OBV変化率: '+(obvChange>=0?'+':'')+obvChange.toFixed(1)+'%',
+      obvTrend?70:30,obvTrend?'var(--green)':'var(--red)');
+
+    show('ic-fib');
+    var fibLabel=nearFib?('¥'+fmt(nearFib.l,0)+' ('+nearFib.n+')'):'--';
+    var fibNearness=nearFib?Math.abs(cur-nearFib.l)/cur*100:99;
+    var fibCls=fibNearness<0.5?'neutral':'neutral';
+    setInd('fib',nearFib?nearFib.n:'--',fibNearness<1.5?'近接中':'参考水準',fibCls,
+      '52週HH/LL基準 最接近: ¥'+fmt(fib.r382,0)+'(38.2%) ¥'+fmt(fib.r618,0)+'(61.8%)',
+      (cur-swLo)/(swHi-swLo)*100,'var(--gold)');
 
     // Signals
     document.getElementById('slist').innerHTML=sigs.map(function(s){
@@ -1126,6 +1224,87 @@ function calcStoch(hi,lo,cl,p=14,sk=3,sd=3){
 function calcATR(hi,lo,cl,p=14){
   const tr=[];for(let i=1;i<cl.length;i++)tr.push(Math.max(hi[i]-lo[i],Math.abs(hi[i]-cl[i-1]),Math.abs(lo[i]-cl[i-1])));
   return tr.length>=p?tr.slice(-p).reduce((a,b)=>a+b,0)/p:tr[tr.length-1]||0;
+}
+
+function calcIchimoku(hi,lo,cl){
+  var n=cl.length;
+  var tenkan=hi.map(function(_,i){
+    if(i<8)return null;
+    var h=Math.max.apply(null,hi.slice(i-8,i+1));
+    var l=Math.min.apply(null,lo.slice(i-8,i+1));
+    return(h+l)/2;
+  });
+  var kijun=hi.map(function(_,i){
+    if(i<25)return null;
+    var h=Math.max.apply(null,hi.slice(i-25,i+1));
+    var l=Math.min.apply(null,lo.slice(i-25,i+1));
+    return(h+l)/2;
+  });
+  var senkouA=tenkan.map(function(t,i){return t&&kijun[i]?(t+kijun[i])/2:null;});
+  var senkouB=hi.map(function(_,i){
+    if(i<51)return null;
+    var h=Math.max.apply(null,hi.slice(i-51,i+1));
+    var l=Math.min.apply(null,lo.slice(i-51,i+1));
+    return(h+l)/2;
+  });
+  return{tenkan:tenkan,kijun:kijun,senkouA:senkouA,senkouB:senkouB};
+}
+
+function calcADX(hi,lo,cl,p){
+  p=p||14;
+  var n=cl.length;
+  if(n<p+2)return{adx:0,pdi:0,mdi:0};
+  var tr=[],pdm=[],mdm=[];
+  for(var i=1;i<n;i++){
+    var h=hi[i],l=lo[i],ph=hi[i-1],pl=lo[i-1],pc=cl[i-1];
+    tr.push(Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc)));
+    var up=h-ph,dn=pl-l;
+    pdm.push(up>dn&&up>0?up:0);
+    mdm.push(dn>up&&dn>0?dn:0);
+  }
+  var sTR=tr.slice(0,p).reduce(function(a,b){return a+b;},0);
+  var sPDM=pdm.slice(0,p).reduce(function(a,b){return a+b;},0);
+  var sMDM=mdm.slice(0,p).reduce(function(a,b){return a+b;},0);
+  var pdiArr=[],mdiArr=[],dxArr=[];
+  for(var j=p;j<tr.length;j++){
+    sTR=sTR-sTR/p+tr[j];
+    sPDM=sPDM-sPDM/p+pdm[j];
+    sMDM=sMDM-sMDM/p+mdm[j];
+    var pdi=sTR>0?(sPDM/sTR)*100:0;
+    var mdi=sTR>0?(sMDM/sTR)*100:0;
+    pdiArr.push(pdi);mdiArr.push(mdi);
+    var dx=(pdi+mdi)>0?Math.abs(pdi-mdi)/(pdi+mdi)*100:0;
+    dxArr.push(dx);
+  }
+  if(dxArr.length<p)return{adx:dxArr[dxArr.length-1]||0,pdi:pdiArr[pdiArr.length-1]||0,mdi:mdiArr[mdiArr.length-1]||0};
+  var adx=dxArr.slice(0,p).reduce(function(a,b){return a+b;},0)/p;
+  for(var k=p;k<dxArr.length;k++){adx=(adx*(p-1)+dxArr[k])/p;}
+  return{adx:adx,pdi:pdiArr[pdiArr.length-1]||0,mdi:mdiArr[mdiArr.length-1]||0};
+}
+
+function calcVWAP(cl,hi,lo,vol){
+  var cumTPV=0,cumVol=0;
+  for(var i=0;i<cl.length;i++){
+    var tp=(hi[i]+lo[i]+cl[i])/3;
+    cumTPV+=tp*(vol[i]||0);
+    cumVol+=vol[i]||0;
+  }
+  return cumVol>0?cumTPV/cumVol:cl[cl.length-1];
+}
+
+function calcOBV(cl,vol){
+  var obv=[0];
+  for(var i=1;i<cl.length;i++){
+    if(cl[i]>cl[i-1])obv.push(obv[i-1]+(vol[i]||0));
+    else if(cl[i]<cl[i-1])obv.push(obv[i-1]-(vol[i]||0));
+    else obv.push(obv[i-1]);
+  }
+  return obv;
+}
+
+function calcFibonacci(swHi,swLo){
+  var diff=swHi-swLo;
+  return{hi:swHi,lo:swLo,r236:swHi-diff*0.236,r382:swHi-diff*0.382,r500:swHi-diff*0.5,r618:swHi-diff*0.618,r786:swHi-diff*0.786};
 }
 
 // ============================================================

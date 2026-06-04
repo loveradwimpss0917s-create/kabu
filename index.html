@@ -277,6 +277,40 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 /* ── TAB PANELS ── */
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+
+/* ── 52週レンジ ── */
+.w52-bar-wrap{position:relative;height:20px;margin:8px 0}
+.w52-track{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:6px;background:rgba(26,143,227,.15);border-radius:3px}
+.w52-fill{position:absolute;left:0;top:50%;transform:translateY(-50%);height:6px;border-radius:3px;transition:width 1s ease}
+.w52-marker{position:absolute;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;border:2px solid #fff;z-index:2;box-shadow:0 0 6px rgba(0,0,0,.5)}
+.stop-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.stop-item{background:var(--bg);border-radius:6px;padding:8px 10px}
+.stop-lbl{font-size:9px;color:var(--txt2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;margin-bottom:3px}
+.stop-val{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700}
+
+/* ── アナリスト ── */
+.analyst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:8px}
+.analyst-item{background:var(--bg);border-radius:8px;padding:10px 12px}
+.analyst-lbl{font-size:9px;color:var(--txt2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;margin-bottom:3px}
+.analyst-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
+.analyst-sub{font-size:9px;color:var(--txt3);margin-top:2px}
+.consensus-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:8px 0 4px}
+
+/* ── 損益シミュレーター ── */
+.sim-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-end}
+.sim-input-wrap{flex:1;min-width:0}
+.sim-lbl{font-size:9px;color:var(--txt2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.sim-input{width:100%;background:var(--bg);border:1px solid var(--bdr2);border-radius:6px;padding:9px 10px;color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;-webkit-appearance:none}
+.sim-btn{background:linear-gradient(135deg,#1a5a90,#1a8fe3);border:1px solid var(--blue);border-radius:6px;padding:10px 0;color:#fff;font-size:11px;font-family:'Orbitron',monospace;letter-spacing:1px;cursor:pointer;width:100%;margin-top:4px}
+.sim-result{background:var(--bg);border-radius:8px;padding:12px;margin-top:8px;display:none}
+.sim-result.show{display:block}
+.sim-res-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.sim-res-item{padding:8px 10px;border-radius:6px;border:1px solid var(--bdr)}
+.sim-res-lbl{font-size:9px;color:var(--txt2);font-family:'JetBrains Mono',monospace;margin-bottom:3px}
+.sim-res-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700}
+
+/* ── 業績チャート ── */
+.earn-chart-wrap{height:160px;position:relative;margin-top:8px}
 </style>
 </head>
 <body>
@@ -402,6 +436,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="ctitle">ロング / ショート 予測</div>
     <div id="lsContent"></div>
   </div>
+  <div class="card blue" id="week52card" style="display:none">
+    <div class="ctitle">52週レンジ &amp; ストップ高/安値</div>
+    <div id="week52content"></div>
+  </div>
+  <div class="card" id="analystcard" style="display:none">
+    <div class="ctitle">アナリスト評価・目標株価</div>
+    <div id="analystContent"></div>
+  </div>
 </div>
 
 <!-- TAB: チャート -->
@@ -455,13 +497,25 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="fin-grid" id="finGrid"></div>
     <div style="font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:8px" id="finNote"></div>
   </div>
+  <div class="card green" id="earningscard" style="display:none">
+    <div class="ctitle">業績推移（過去4期）</div>
+    <div class="earn-chart-wrap"><canvas id="earningsChart"></canvas></div>
+  </div>
+  <div class="card orange" id="calcard" style="display:none">
+    <div class="ctitle">決算・配当カレンダー</div>
+    <div id="calContent"></div>
+  </div>
 </div>
 
 <!-- TAB: リスク -->
 <div class="tab-panel" id="tab-risk">
   <div class="card" id="rcard">
-    <div class="ctitle">リスク管理 / エントリー</div>
+    <div class="ctitle">リスク管理 / エントリー目安</div>
     <div class="rgrid" id="rgrid"></div>
+  </div>
+  <div class="card orange" id="simcard" style="display:none">
+    <div class="ctitle">損益シミュレーター</div>
+    <div id="simContent"></div>
   </div>
 </div>
 
@@ -630,7 +684,7 @@ async function fetchYahooChart(code,interval){
 
 async function fetchYahooQuoteSummary(code){
   var sym=code+'.T';
-  var mods='financialData,defaultKeyStatistics,summaryDetail,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory';
+  var mods='financialData,defaultKeyStatistics,summaryDetail,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory,calendarEvents,recommendationTrend';
   var url='/yfin/v10/finance/quoteSummary/'+sym+'?modules='+mods+'&lang=ja';
   try{
     var r=await fetch(url);
@@ -993,7 +1047,14 @@ async function analyze(){
     if(!isIntraday&&newsData.length>0){renderNews(newsData,code); show('newscard');}
 
     // Financial
-    if(!isIntraday&&summaryData){renderFinancial(summaryData); show('fincard');}
+    if(!isIntraday&&summaryData){
+      renderFinancial(summaryData); show('fincard');
+      renderWeek52(summaryData, cur);
+      renderAnalyst(summaryData, cur);
+      renderEarningsChart(summaryData);
+      renderCalendar(summaryData);
+    }
+    renderSimulator(cur, atr, vClass);
 
     // Indicators
     ['ic-rsi','ic-macd','ic-stoch','ic-bb','ic-ma','ic-vol','ic-ichimoku','ic-adx','ic-vwap','ic-obv','ic-fib'].forEach(function(id){show(id);});
@@ -1227,6 +1288,223 @@ function renderFinancial(summary){
     return '<div class="fin-item"><div class="fin-lbl">'+r[0]+'</div><div class="fin-val">'+r[1]+'</div><div class="fin-sub">'+r[2]+'</div></div>';
   }).join('');
   document.getElementById('finNote').textContent='※ 財務データはYahoo Finance提供。最新決算との差異がある場合があります。';
+}
+
+// ── 日本株値幅制限 ────────────────────────────
+function calcStopLimit(price){
+  var t=[[100,30],[200,50],[500,80],[700,100],[1000,150],[1500,300],[2000,400],[3000,500],[5000,700],[7000,1000],
+    [10000,1500],[15000,3000],[20000,4000],[30000,5000],[50000,7000],[70000,10000],[100000,15000],[150000,30000],
+    [200000,40000],[300000,50000],[500000,70000],[700000,100000],[1000000,150000],[1500000,300000],[2000000,400000],
+    [3000000,500000],[5000000,700000],[7000000,1000000],[Infinity,1500000]];
+  for(var i=0;i<t.length;i++){if(price<t[i][0])return t[i][1];}
+  return 1500000;
+}
+
+// ── RENDER: 52週レンジ + ストップ高/安 ──────────
+function renderWeek52(summaryData,cur){
+  var el=document.getElementById('week52content');
+  if(!el||!summaryData)return;
+  var sd=summaryData.summaryDetail||{};
+  var h52=sd.fiftyTwoWeekHigh&&sd.fiftyTwoWeekHigh.raw;
+  var l52=sd.fiftyTwoWeekLow&&sd.fiftyTwoWeekLow.raw;
+  if(!h52||!l52||h52<=l52){el.innerHTML='<div style="color:var(--txt3);font-size:11px;font-family:JetBrains Mono,monospace">データ不足</div>';return;}
+  var pct=Math.max(0,Math.min(100,(cur-l52)/(h52-l52)*100));
+  var lim=calcStopLimit(cur);
+  var stopH=cur+lim;
+  var stopL=Math.max(0,cur-lim);
+  var limPct=(lim/cur*100).toFixed(1);
+  var barC=pct>80?'var(--red)':pct<20?'var(--green)':'var(--blue)';
+  var posLbl=pct>80?'高値圏':pct<20?'底値圏':'中間域';
+  el.innerHTML=
+    '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--txt3);font-family:JetBrains Mono,monospace;margin-bottom:2px">'+
+    '<span>52W安 ¥'+fmt(l52,1)+'</span><span>52W高 ¥'+fmt(h52,1)+'</span></div>'+
+    '<div class="w52-bar-wrap">'+
+    '<div class="w52-track"></div>'+
+    '<div class="w52-fill" style="width:0%;background:'+barC+'" id="_w52fill"></div>'+
+    '<div class="w52-marker" style="left:'+pct+'%;background:'+barC+'"></div>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center">'+
+    '<span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--txt2)">現在 ¥'+fmt(cur,1)+'</span>'+
+    '<span style="font-family:Orbitron,monospace;font-size:12px;font-weight:700;color:'+barC+'">'+pct.toFixed(1)+'% ('+posLbl+')</span>'+
+    '</div>'+
+    '<div style="font-family:Orbitron,monospace;font-size:8px;letter-spacing:2px;color:var(--txt3);margin:10px 0 6px;border-left:2px solid var(--gold);padding-left:6px">値幅制限（翌営業日）</div>'+
+    '<div class="stop-grid">'+
+    '<div class="stop-item"><div class="stop-lbl">ストップ高</div><div class="stop-val" style="color:var(--green)">¥'+fmt(stopH,0)+'</div><div style="font-size:9px;color:var(--txt3);font-family:JetBrains Mono,monospace">+¥'+fmt(lim,0)+' (+'+limPct+'%)</div></div>'+
+    '<div class="stop-item"><div class="stop-lbl">ストップ安</div><div class="stop-val" style="color:var(--red)">¥'+fmt(stopL,0)+'</div><div style="font-size:9px;color:var(--txt3);font-family:JetBrains Mono,monospace">-¥'+fmt(lim,0)+' (-'+limPct+'%)</div></div>'+
+    '</div>';
+  show('week52card');
+  setTimeout(function(){var f=document.getElementById('_w52fill');if(f)f.style.width=pct+'%';},100);
+}
+
+// ── RENDER: アナリスト評価・目標株価 ────────────
+function renderAnalyst(summaryData,cur){
+  var el=document.getElementById('analystContent');
+  if(!el||!summaryData)return;
+  var fd=summaryData.financialData||{};
+  var tH=fd.targetHighPrice&&fd.targetHighPrice.raw;
+  var tL=fd.targetLowPrice&&fd.targetLowPrice.raw;
+  var tM=fd.targetMeanPrice&&fd.targetMeanPrice.raw;
+  var recKey=fd.recommendationKey||'';
+  var numAna=fd.numberOfAnalystOpinions&&fd.numberOfAnalystOpinions.raw;
+  var rt=summaryData.recommendationTrend;
+  var trend=rt&&rt.trend&&rt.trend[0]||{};
+  var sBuy=trend.strongBuy||0,buy=trend.buy||0,hold=trend.hold||0,sell=trend.sell||0,sSell=trend.strongSell||0;
+  var total=sBuy+buy+hold+sell+sSell;
+  if(!tM&&!total){el.innerHTML='<div style="color:var(--txt3);font-size:11px;font-family:JetBrains Mono,monospace">アナリストデータなし（上場間もない銘柄の可能性）</div>';return;}
+  var upside=tM?((tM-cur)/cur*100).toFixed(1):null;
+  var recLbls={'strong_buy':'強い買い','buy':'買い','hold':'中立','sell':'売り','strong_sell':'強い売り'};
+  var recLabel=recLbls[recKey]||(recKey.toUpperCase())||'--';
+  var recColor=recKey.includes('buy')?'var(--green)':recKey.includes('sell')?'var(--red)':'var(--yellow)';
+  var grid=[
+    ['コンセンサス','<span style="color:'+recColor+';font-weight:700">'+recLabel+'</span>',numAna?numAna+'名のアナリスト':''],
+    ['目標株価（中央）',tM?'¥'+fmt(tM,0):'--',upside?(parseFloat(upside)>=0?'+':'')+upside+'% 乖離率':''],
+    ['目標株価（上限）',tH?'¥'+fmt(tH,0):'--','強気シナリオ'],
+    ['目標株価（下限）',tL?'¥'+fmt(tL,0):'--','弱気シナリオ'],
+  ].map(function(r){return '<div class="analyst-item"><div class="analyst-lbl">'+r[0]+'</div><div class="analyst-val">'+r[1]+'</div><div class="analyst-sub">'+r[2]+'</div></div>';}).join('');
+  var barHTML='';
+  if(total>0){
+    barHTML='<div style="margin-top:12px">'+
+    '<div style="font-size:9px;color:var(--txt2);font-family:JetBrains Mono,monospace;margin-bottom:4px">評価分布（計'+total+'名）</div>'+
+    '<div class="consensus-bar">'+
+    '<div style="width:'+(sBuy/total*100)+'%;background:#006633"></div>'+
+    '<div style="width:'+(buy/total*100)+'%;background:var(--green)"></div>'+
+    '<div style="width:'+(hold/total*100)+'%;background:var(--yellow)"></div>'+
+    '<div style="width:'+(sell/total*100)+'%;background:var(--orange)"></div>'+
+    '<div style="width:'+(sSell/total*100)+'%;background:var(--red)"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+    [['強買い',sBuy,'#00cc66'],['買い',buy,'var(--green)'],['中立',hold,'var(--yellow)'],['売り',sell,'var(--orange)'],['強売り',sSell,'var(--red)']].map(function(r){
+      return '<span style="font-family:JetBrains Mono,monospace;font-size:9px;color:'+r[2]+'">'+r[0]+': '+r[1]+'名</span>';
+    }).join('')+
+    '</div></div>';
+  }
+  el.innerHTML='<div class="analyst-grid">'+grid+'</div>'+barHTML;
+  show('analystcard');
+}
+
+// ── RENDER: 業績推移チャート ──────────────────
+var earningsChartInst=null;
+function renderEarningsChart(summaryData){
+  if(!summaryData)return;
+  var is=summaryData.incomeStatementHistory&&summaryData.incomeStatementHistory.incomeStatementHistory;
+  if(!is||is.length===0)return;
+  var periods=is.slice(0,4).reverse();
+  var labels=periods.map(function(p){var d=new Date((p.endDate&&p.endDate.raw||0)*1000);return d.getFullYear()+'/'+(d.getMonth()+1);});
+  var revenue=periods.map(function(p){return p.totalRevenue&&p.totalRevenue.raw?Math.round(p.totalRevenue.raw/1e8):0;});
+  var opInc=periods.map(function(p){return p.operatingIncome&&p.operatingIncome.raw?Math.round(p.operatingIncome.raw/1e8):0;});
+  var netInc=periods.map(function(p){return p.netIncome&&p.netIncome.raw?Math.round(p.netIncome.raw/1e8):0;});
+  var ctx=document.getElementById('earningsChart');
+  if(!ctx)return;
+  if(earningsChartInst)earningsChartInst.destroy();
+  earningsChartInst=new Chart(ctx.getContext('2d'),{
+    type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'売上高(億)',data:revenue,backgroundColor:'rgba(26,143,227,.75)',borderRadius:3},
+      {label:'営業利益(億)',data:opInc,backgroundColor:'rgba(0,200,117,.75)',borderRadius:3},
+      {label:'純利益(億)',data:netInc,backgroundColor:'rgba(200,162,39,.75)',borderRadius:3},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#6888aa',font:{family:"'JetBrains Mono',monospace",size:9},boxWidth:10,padding:8}},
+        tooltip:{backgroundColor:'#0c1225',titleColor:'#6888aa',bodyColor:'#e8f4ff',
+          titleFont:{family:"'JetBrains Mono',monospace",size:9},bodyFont:{family:"'JetBrains Mono',monospace",size:9},
+          callbacks:{label:function(c){return c.dataset.label+': '+c.parsed.y.toLocaleString()+'億';}}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(26,42,68,.6)'},ticks:{color:'#334466',font:{family:"'JetBrains Mono',monospace",size:9}}},
+        y:{position:'right',grid:{color:'rgba(26,42,68,.6)'},ticks:{color:'#6888aa',font:{family:"'JetBrains Mono',monospace",size:9},callback:function(v){return v+'億';}}}
+      }
+    }
+  });
+  show('earningscard');
+}
+
+// ── RENDER: 決算・配当カレンダー ─────────────
+function renderCalendar(summaryData){
+  var el=document.getElementById('calContent');
+  if(!el||!summaryData)return;
+  var cal=summaryData.calendarEvents||{};
+  var sd=summaryData.summaryDetail||{};
+  var earArr=cal.earnings&&cal.earnings.earningsDate;
+  var nextEar=earArr&&earArr[0]&&earArr[0].raw;
+  var exDiv=sd.exDividendDate&&sd.exDividendDate.raw;
+  var divRate=sd.dividendRate&&sd.dividendRate.raw;
+  var divYield=sd.dividendYield&&sd.dividendYield.raw;
+  var fmtD=function(ts){if(!ts)return '--';var d=new Date(ts*1000);return d.getFullYear()+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0');};
+  var now=Date.now()/1000;
+  var daysEar=nextEar?Math.ceil((nextEar-now)/86400):null;
+  var daysDiv=exDiv?Math.ceil((exDiv-now)/86400):null;
+  if(!nextEar&&!exDiv&&!divRate){el.innerHTML='<div style="color:var(--txt3);font-size:11px;font-family:JetBrains Mono,monospace">カレンダーデータなし</div>';return;}
+  var mkBadge=function(d){if(d==null)return '';if(d<0)return '<span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--txt3)">終了</span>';if(d<=7)return '<span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--red)">残'+d+'日</span>';if(d<=30)return '<span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--yellow)">残'+d+'日</span>';return '<span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--txt3)">残'+d+'日</span>';};
+  var rows=[
+    ['📅 次回決算日',fmtD(nextEar),mkBadge(daysEar)],
+    ['💰 権利確定日',fmtD(exDiv),mkBadge(daysDiv)],
+    ['1株配当金',divRate?'¥'+fmt(divRate,1):'--','年間'],
+    ['配当利回り',divYield?(divYield*100).toFixed(2)+'%':'--','現在値基準'],
+  ];
+  el.innerHTML='<div class="fin-grid">'+
+    rows.map(function(r){return '<div class="fin-item"><div class="fin-lbl">'+r[0]+'</div><div class="fin-val">'+r[1]+'</div><div class="fin-sub">'+r[2]+'</div></div>';}).join('')+
+  '</div>';
+  show('calcard');
+}
+
+// ── RENDER: 損益シミュレーター ─────────────────
+var _simCur=0,_simAtr=0,_simVClass='';
+function renderSimulator(cur,atr,vClass){
+  _simCur=cur;_simAtr=atr;_simVClass=vClass;
+  var el=document.getElementById('simContent');
+  if(!el)return;
+  var sBuy=vClass==='buy';
+  var sugSL=fmt(sBuy?cur-atr*1.5:cur+atr*1.5,0);
+  var sugTP=fmt(sBuy?cur+atr*2.5:cur-atr*2.5,0);
+  el.innerHTML=
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">購入価格 (¥)</div><input class="sim-input" id="simEntry" type="number" value="'+fmt(cur,0)+'" step="1" inputmode="decimal"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">株数</div><input class="sim-input" id="simQty" type="number" value="100" step="100" inputmode="decimal" min="1"></div>'+
+    '</div>'+
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">損切り価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugSL+'</span></div><input class="sim-input" id="simSL" type="number" value="'+sugSL+'" step="1" inputmode="decimal"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">目標価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugTP+'</span></div><input class="sim-input" id="simTP" type="number" value="'+sugTP+'" step="1" inputmode="decimal"></div>'+
+    '</div>'+
+    '<button class="sim-btn" onclick="calcSimulator()">▶ シミュレート</button>'+
+    '<div class="sim-result" id="simResult"></div>';
+  show('simcard');
+  setTimeout(calcSimulator,150);
+}
+
+function calcSimulator(){
+  var entry=parseFloat(document.getElementById('simEntry').value);
+  var qty=parseFloat(document.getElementById('simQty').value);
+  var sl=parseFloat(document.getElementById('simSL').value);
+  var tp=parseFloat(document.getElementById('simTP').value);
+  var el=document.getElementById('simResult');
+  if(!el)return;
+  if(isNaN(entry)||isNaN(qty)||isNaN(sl)||isNaN(tp)||entry<=0||qty<1){
+    el.className='sim-result show';
+    el.innerHTML='<div style="color:var(--red);font-size:11px;font-family:JetBrains Mono,monospace">入力値を確認してください</div>';
+    return;
+  }
+  var totalCost=entry*qty;
+  var profitTP=(tp-entry)*qty;
+  var lossSL=(sl-entry)*qty;
+  var riskAmt=Math.abs(lossSL);
+  var rr=riskAmt>0?Math.abs(profitTP)/riskAmt:0;
+  var riskPct=Math.abs((sl-entry)/entry*100);
+  var targetPct=Math.abs((tp-entry)/entry*100);
+  var rrColor=rr>=2?'var(--green)':rr>=1?'var(--yellow)':'var(--red)';
+  var profColor=profitTP>=0?'var(--green)':'var(--red)';
+  var lossColor=lossSL<0?'var(--red)':'var(--green)';
+  var breakeven=riskAmt>0?(rr*riskPct).toFixed(2):'--';
+  el.className='sim-result show';
+  el.innerHTML=
+    '<div class="sim-res-grid">'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">必要資金</div><div class="sim-res-val">¥'+fmt(totalCost,0)+'</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">リスクリワード比</div><div class="sim-res-val" style="color:'+rrColor+'">'+rr.toFixed(2)+':1</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">目標時 利益</div><div class="sim-res-val" style="color:'+profColor+'">'+(profitTP>=0?'+':'')+'¥'+fmt(profitTP,0)+'<span style="font-size:10px;color:var(--txt3)"> (+'+targetPct.toFixed(1)+'%)</span></div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">損切り時 損失</div><div class="sim-res-val" style="color:'+lossColor+'">'+(lossSL>=0?'+':'')+'¥'+fmt(lossSL,0)+'<span style="font-size:10px;color:var(--txt3)"> (-'+riskPct.toFixed(1)+'%)</span></div></div>'+
+    '</div>'+
+    (rr>=2?'<div style="margin-top:8px;padding:8px;background:rgba(0,200,117,.08);border-radius:6px;font-size:10px;color:var(--green);font-family:JetBrains Mono,monospace">✅ RR比2以上 — 良好なリスク設定です</div>':'')+
+    (rr>0&&rr<1?'<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ RR比1未満 — 損切りが近すぎるか目標が低すぎます</div>':'');
 }
 
 // ── RENDER: CHART ──────────────────────────────

@@ -12,25 +12,25 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
 :root{
-  --bg:#04060f;--bg2:#0c1225;--bg3:#0f1830;
-  --green:#00ff88;--red:#ff3366;--blue:#00aaff;
-  --yellow:#ffcc00;--purple:#aa55ff;--orange:#ff8800;
-  --txt:#e8f4ff;--txt2:#6888aa;--txt3:#334466;
-  --bdr:#1a2a44;--bdr2:#2a4466;
-  --gg:0 0 20px rgba(0,255,136,.3);
-  --rg:0 0 20px rgba(255,51,102,.3);
-  --bg_:0 0 20px rgba(0,170,255,.3);
+  --bg:#050c18;--bg2:#0a1628;--bg3:#0f1e35;
+  --green:#00c875;--red:#e84545;--blue:#1a8fe3;
+  --gold:#c8a227;--yellow:#c8a227;--purple:#8855dd;--orange:#e07000;
+  --txt:#cce0f5;--txt2:#6a90b5;--txt3:#2e4a62;
+  --bdr:#1a3050;--bdr2:#264468;
+  --gg:0 2px 20px rgba(0,200,117,.2);
+  --rg:0 2px 20px rgba(232,69,69,.2);
+  --bg_:0 2px 20px rgba(26,143,227,.2);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{background:var(--bg);color:var(--txt);font-family:'Noto Sans JP',sans-serif;min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,170,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,170,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(26,143,227,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(26,143,227,.02) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
 
 /* ── LAYOUT ── */
 .wrap{max-width:900px;margin:0 auto;padding:12px 14px;position:relative;z-index:1}
 
 /* ── HEADER ── */
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 0 16px;border-bottom:1px solid var(--bdr);margin-bottom:16px}
-.logo{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;letter-spacing:3px;background:linear-gradient(135deg,var(--blue),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;letter-spacing:3px;background:linear-gradient(135deg,var(--gold),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .logo-sub{font-size:9px;letter-spacing:4px;color:var(--txt3);font-family:'JetBrains Mono',monospace;display:block;margin-top:2px}
 .hdr-r{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:var(--gg);animation:pulse 2s infinite;flex-shrink:0}
@@ -50,7 +50,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .sinput{width:100%;background:var(--bg);border:1px solid var(--bdr2);border-radius:8px;padding:11px 12px;color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;letter-spacing:3px;outline:none;-webkit-appearance:none;display:block}
 .sinput:focus{border-color:var(--blue)}
 .isel{width:100%;background:var(--bg);border:1px solid var(--bdr2);border-radius:8px;padding:11px 10px;color:var(--txt);font-size:12px;outline:none;-webkit-appearance:none;cursor:pointer;display:block}
-.abtn{width:100%;background:linear-gradient(135deg,#005588,#0088cc);border:1px solid var(--blue);border-radius:8px;padding:11px 0;color:#fff;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;display:block;text-align:center}
+.abtn{width:100%;background:linear-gradient(135deg,#1a5a90,#1a8fe3);border:1px solid var(--blue);border-radius:8px;padding:11px 0;color:#fff;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;display:block;text-align:center}
 .abtn:disabled{opacity:.4;cursor:not-allowed}
 .qs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center}
 .qs-lbl{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace;white-space:nowrap}
@@ -99,7 +99,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .card.blue::before{background:linear-gradient(90deg,transparent,var(--blue),transparent)}
 .card.green::before{background:linear-gradient(90deg,transparent,var(--green),transparent)}
 .card.orange::before{background:linear-gradient(90deg,transparent,var(--orange),transparent)}
-.ctitle{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--txt2);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.ctitle{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--txt2);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.ind-section-title{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--txt3);text-transform:uppercase;margin:16px 0 10px;padding-left:4px;border-left:2px solid var(--gold)}
 .ctitle::before{content:'';width:3px;height:12px;background:var(--blue);border-radius:2px;flex-shrink:0}
 .card.green .ctitle::before{background:var(--green)}
 .card.orange .ctitle::before{background:var(--orange)}
@@ -118,7 +119,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .ibadge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:4px;text-transform:uppercase}
 .ibadge.bullish{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.25)}.ibadge.bearish{background:rgba(255,51,102,.12);color:var(--red);border:1px solid rgba(255,51,102,.25)}.ibadge.neutral{background:rgba(255,204,0,.12);color:var(--yellow);border:1px solid rgba(255,204,0,.25)}.ibadge.overbought{background:rgba(255,51,102,.12);color:var(--red);border:1px solid rgba(255,51,102,.25)}.ibadge.oversold{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.25)}
 .ival{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--txt);margin-bottom:4px}
-.idesc{font-size:10px;color:var(--txt2);line-height:1.5}
+.idesc{font-size:11px;color:var(--txt2);line-height:1.6}
+.iexplain{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace;border-top:1px solid var(--bdr);margin-top:8px;padding-top:6px;line-height:1.7}
 .ibar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
 .ibfill{height:100%;border-radius:2px;transition:width 1s ease}
 
@@ -254,7 +256,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 <header>
   <div>
     <div class="logo">StockEdge</div>
-    <span class="logo-sub">YAHOO FINANCE EDITION</span>
+    <span class="logo-sub">プロ仕様テクニカル分析システム</span>
+    <span class="logo-edition" style="font-size:8px;letter-spacing:3px;color:var(--txt3);font-family:'JetBrains Mono',monospace;display:block">YAHOO FINANCE DATA</span>
   </div>
   <div class="hdr-r">
     <div class="dot"></div>
@@ -343,7 +346,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
 <!-- CHART -->
 <div class="card blue" id="ccard">
-  <div class="ctitle">価格チャート + BB + MA</div>
+  <div class="ctitle">価格チャート + 一目均衡表 + BB + MA</div>
   <div class="chart-wrap"><canvas id="pchart"></canvas></div>
 </div>
 
@@ -373,13 +376,25 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 </div>
 
 <!-- INDICATORS -->
+<div class="ind-section-title">■ モメンタム指標</div>
 <div class="igrid">
-  <div class="icard" id="ic-rsi"><div class="ihdr"><div class="iname">RSI (14)</div><div class="ibadge" id="rsi-b">---</div></div><div class="ival" id="rsi-v">--</div><div class="idesc" id="rsi-d">---</div><div class="ibar"><div class="ibfill" id="rsi-f" style="width:0%;background:var(--blue)"></div></div></div>
-  <div class="icard" id="ic-macd"><div class="ihdr"><div class="iname">MACD</div><div class="ibadge" id="macd-b">---</div></div><div class="ival" id="macd-v">--</div><div class="idesc" id="macd-d">---</div><div class="ibar"><div class="ibfill" id="macd-f" style="width:50%;background:var(--blue)"></div></div></div>
-  <div class="icard" id="ic-stoch"><div class="ihdr"><div class="iname">ストキャスティクス</div><div class="ibadge" id="stoch-b">---</div></div><div class="ival" id="stoch-v">--</div><div class="idesc" id="stoch-d">---</div><div class="ibar"><div class="ibfill" id="stoch-f" style="width:0%;background:var(--blue)"></div></div></div>
-  <div class="icard" id="ic-bb"><div class="ihdr"><div class="iname">ボリンジャーバンド</div><div class="ibadge" id="bb-b">---</div></div><div class="ival" id="bb-v">--</div><div class="idesc" id="bb-d">---</div><div class="ibar"><div class="ibfill" id="bb-f" style="width:50%;background:var(--blue)"></div></div></div>
-  <div class="icard" id="ic-ma"><div class="ihdr"><div class="iname">移動平均線</div><div class="ibadge" id="ma-b">---</div></div><div class="ival" id="ma-v">--</div><div class="idesc" id="ma-d">---</div><div class="ibar"><div class="ibfill" id="ma-f" style="width:50%;background:var(--blue)"></div></div></div>
-  <div class="icard" id="ic-vol"><div class="ihdr"><div class="iname">出来高</div><div class="ibadge" id="vol-b">---</div></div><div class="ival" id="vol-v">--</div><div class="idesc" id="vol-d">---</div><div class="ibar"><div class="ibfill" id="vol-f" style="width:50%;background:var(--blue)"></div></div></div>
+  <div class="icard" id="ic-rsi"><div class="ihdr"><div class="iname">RSI (14)</div><div class="ibadge" id="rsi-b">---</div></div><div class="ival" id="rsi-v">--</div><div class="idesc" id="rsi-d">---</div><div class="ibar"><div class="ibfill" id="rsi-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">70超=買われすぎ(売り)／30未満=売られすぎ(買い)／50付近=中立</div></div>
+  <div class="icard" id="ic-macd"><div class="ihdr"><div class="iname">MACD</div><div class="ibadge" id="macd-b">---</div></div><div class="ival" id="macd-v">--</div><div class="idesc" id="macd-d">---</div><div class="ibar"><div class="ibfill" id="macd-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ゴールデンクロス=買い強シグナル／デッドクロス=売り強シグナル</div></div>
+  <div class="icard" id="ic-stoch"><div class="ihdr"><div class="iname">ストキャスティクス</div><div class="ibadge" id="stoch-b">---</div></div><div class="ival" id="stoch-v">--</div><div class="idesc" id="stoch-d">---</div><div class="ibar"><div class="ibfill" id="stoch-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">K線が80超=過熱・売り候補／20未満=売られすぎ・買い候補</div></div>
+</div>
+<div class="ind-section-title">■ トレンド指標</div>
+<div class="igrid">
+  <div class="icard" id="ic-bb"><div class="ihdr"><div class="iname">ボリンジャーバンド</div><div class="ibadge" id="bb-b">---</div></div><div class="ival" id="bb-v">--</div><div class="idesc" id="bb-d">---</div><div class="ibar"><div class="ibfill" id="bb-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">上限=過熱・売り候補／下限=売られすぎ・買い候補／σ=ボラティリティ</div></div>
+  <div class="icard" id="ic-ma"><div class="ihdr"><div class="iname">移動平均線</div><div class="ibadge" id="ma-b">---</div></div><div class="ival" id="ma-v">--</div><div class="idesc" id="ma-d">---</div><div class="ibar"><div class="ibfill" id="ma-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">5MA&gt;25MA&gt;75MA=パーフェクトオーダー(最強上昇)／逆順=最強下降</div></div>
+  <div class="icard" id="ic-ichimoku"><div class="ihdr"><div class="iname">一目均衡表</div><div class="ibadge" id="ichimoku-b">---</div></div><div class="ival" id="ichimoku-v">--</div><div class="idesc" id="ichimoku-d">---</div><div class="ibar"><div class="ibfill" id="ichimoku-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">雲の上=強い上昇トレンド／雲の下=強い下降トレンド／雲中=転換期</div></div>
+  <div class="icard" id="ic-adx"><div class="ihdr"><div class="iname">ADX (トレンド強度)</div><div class="ibadge" id="adx-b">---</div></div><div class="ival" id="adx-v">--</div><div class="idesc" id="adx-d">---</div><div class="ibar"><div class="ibfill" id="adx-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ADX25超=強トレンド／25未満=レンジ相場。+DI&gt;-DI=上昇／-DI&gt;+DI=下降</div></div>
+</div>
+<div class="ind-section-title">■ 出来高・価格水準</div>
+<div class="igrid">
+  <div class="icard" id="ic-vol"><div class="ihdr"><div class="iname">出来高</div><div class="ibadge" id="vol-b">---</div></div><div class="ival" id="vol-v">--</div><div class="idesc" id="vol-d">---</div><div class="ibar"><div class="ibfill" id="vol-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">平均の1.5倍超=トレンド強化／減少=エネルギー低下・ブレイク前兆</div></div>
+  <div class="icard" id="ic-vwap"><div class="ihdr"><div class="iname">VWAP</div><div class="ibadge" id="vwap-b">---</div></div><div class="ival" id="vwap-v">--</div><div class="idesc" id="vwap-d">---</div><div class="ibar"><div class="ibfill" id="vwap-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">出来高加重平均価格。機関投資家の基準値。現値&gt;VWAP=買い優勢</div></div>
+  <div class="icard" id="ic-obv"><div class="ihdr"><div class="iname">OBV (出来高トレンド)</div><div class="ibadge" id="obv-b">---</div></div><div class="ival" id="obv-v">--</div><div class="idesc" id="obv-d">---</div><div class="ibar"><div class="ibfill" id="obv-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">OBV上昇+価格上昇=本物のトレンド／OBV乖離=ダイバージェンス警戒</div></div>
+  <div class="icard" id="ic-fib"><div class="ihdr"><div class="iname">フィボナッチ</div><div class="ibadge" id="fib-b">---</div></div><div class="ival" id="fib-v">--</div><div class="idesc" id="fib-d">---</div><div class="ibar"><div class="ibfill" id="fib-f" style="width:50%;background:var(--gold)"></div></div><div class="iexplain">主要戻し水準: 23.6%・38.2%・50%・61.8%・78.6%。押し目・戻りの目安</div></div>
 </div>
 
 <!-- SIGNALS -->

@@ -451,6 +451,7 @@ setInterval(function(){
   document.getElementById('clk').textContent=
     [j.getHours(),j.getMinutes(),j.getSeconds()].map(function(v){return String(v).padStart(2,'0')}).join(':')+' JST';
 },1000);
+renderQsTags();
 
 // ── HELPERS ──────────────────────────────────────
 function setLdg(t,s){document.getElementById('ldgTxt').textContent=t||'';document.getElementById('ldgSub').textContent=s||'';}
@@ -852,6 +853,20 @@ async function analyze(){
     document.getElementById('pupd').textContent='更新: '+dates[last]+' | Yahoo Finance | '+interval;
     show('phdr');
 
+    // Price summary bar
+    var psbar=document.getElementById('psbar');
+    if(psbar){psbar.style.display='flex';}
+    var psbarCode=document.getElementById('psbarCode');if(psbarCode)psbarCode.textContent=code;
+    var psbarName=document.getElementById('psbarName');if(psbarName)psbarName.textContent=stockName;
+    var psbarPrice=document.getElementById('psbarPrice');if(psbarPrice){psbarPrice.textContent='¥'+fmt(cur,1);psbarPrice.style.color=chgPct>=0?'var(--green)':'var(--red)';}
+    var psbarChg=document.getElementById('psbarChg');if(psbarChg){psbarChg.textContent=(chgPct>=0?'+':'')+chgPct.toFixed(2)+'%';psbarChg.className='psbar-chg '+(chgPct>=0?'up':'dn');}
+    var psbarSig=document.getElementById('psbarSig');if(psbarSig){psbarSig.textContent=vTxt;psbarSig.className='psbar-sig '+vClass;}
+    var psbarScore=document.getElementById('psbarScore');if(psbarScore)psbarScore.textContent=score.toFixed(0)+'%';
+    // Show tab bar
+    var tabBar=document.getElementById('tabBar');if(tabBar)tabBar.classList.add('on');
+    // Switch to overview tab
+    switchTab('overview');
+
     // Verdict
     var vc=document.getElementById('vcard');
     vc.className='vcard '+vClass; show('vcard');
@@ -888,7 +903,7 @@ async function analyze(){
     if(!isIntraday&&summaryData){renderFinancial(summaryData); show('fincard');}
 
     // Indicators
-    ['ic-rsi','ic-macd','ic-stoch','ic-bb','ic-ma','ic-vol'].forEach(function(id){show(id);});
+    ['ic-rsi','ic-macd','ic-stoch','ic-bb','ic-ma','ic-vol','ic-ichimoku','ic-adx','ic-vwap','ic-obv','ic-fib'].forEach(function(id){show(id);});
     setInd('rsi',rsiVal.toFixed(1),rsiVal<30?'売られすぎ':rsiVal>70?'買われすぎ':rsiVal>50?'強気':'弱気',
       rsiVal<30?'oversold':rsiVal>70?'overbought':rsiVal>50?'bullish':'bearish',
       rd,rsiVal,rsiVal<30?'var(--green)':rsiVal>70?'var(--red)':'var(--blue)');
@@ -963,7 +978,7 @@ async function analyze(){
     ].map(function(r){return '<div class="ritem"><div class="rlbl">'+r[0]+'</div><div class="rval '+r[2]+'">'+r[1]+'</div></div>';}).join('');
     show('rcard');
 
-    document.getElementById('vcard').scrollIntoView({behavior:'smooth',block:'start'});
+    window.scrollTo({top:0,behavior:'smooth'});
 
   }catch(e){
     showErr(e.message||'エラーが発生しました');
@@ -981,6 +996,17 @@ function setInd(id,val,badge,badgeCls,desc,fillW,fillC){
   document.getElementById(id+'-d').textContent=desc;
   document.getElementById(id+'-f').style.width=fillW+'%';
   document.getElementById(id+'-f').style.background=fillC;
+}
+
+var _currentTab='overview';
+function switchTab(name){
+  _currentTab=name;
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  var panel=document.getElementById('tab-'+name);
+  if(panel)panel.classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(function(b){if(b.dataset.tab===name)b.classList.add('active');});
+  if(name==='chart'&&chartInst){setTimeout(function(){chartInst.resize();},60);}
 }
 
 // ── RENDER: LONG/SHORT ──────────────────────────
@@ -1512,8 +1538,6 @@ function detectChartPatterns(hi,lo,cl,vol){
 
 // Enter key
 document.getElementById('sinput').addEventListener('keydown',e=>{ if(e.key==='Enter') analyze(); });
-// Close modal on bg click
-document.getElementById('modalBg').addEventListener('click',e=>{ if(e.target===document.getElementById('modalBg')) closeModal(); });
 
 
 

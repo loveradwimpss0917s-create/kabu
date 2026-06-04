@@ -240,6 +240,43 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .wl-new-folder button{background:rgba(170,85,255,.15);border:1px solid rgba(170,85,255,.4);border-radius:7px;padding:9px 14px;color:var(--purple);font-size:12px;cursor:pointer}
 .wl-refresh-btn{background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:6px 12px;color:var(--txt2);font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace}
 .wl-empty{text-align:center;padding:30px;color:var(--txt3);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:2}
+
+/* QS EDIT */
+.qs-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1}
+.qs-edit-btn{background:none;border:1px solid var(--bdr2);border-radius:4px;color:var(--txt3);font-size:10px;padding:3px 8px;cursor:pointer;white-space:nowrap;font-family:'JetBrains Mono',monospace}
+.qs-edit-btn:hover{color:var(--blue);border-color:var(--blue)}
+.qtag.editing{background:var(--bg);border:1px solid var(--bdr2);border-radius:4px;padding:4px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt2);display:inline-flex;align-items:center;gap:4px}
+.qtag-del{color:var(--red);cursor:pointer;font-size:12px;line-height:1}
+.qtag-add{background:rgba(26,143,227,.1);border:1px solid rgba(26,143,227,.3);color:var(--blue);cursor:pointer;border-radius:4px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px}
+
+/* ── PRICE SUMMARY BAR ── */
+.psbar{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px 16px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:nowrap;overflow:hidden}
+.psbar-left{flex:1;min-width:0}
+.psbar-code{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--blue);letter-spacing:2px}
+.psbar-name{font-size:10px;color:var(--txt2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psbar-mid{text-align:right;flex-shrink:0}
+.psbar-price{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700}
+.psbar-chg{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700}
+.psbar-chg.up{color:var(--green)}.psbar-chg.dn{color:var(--red)}
+.psbar-right{flex-shrink:0;text-align:center}
+.psbar-sig{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:6px 12px;border-radius:6px}
+.psbar-sig.buy{background:rgba(0,200,117,.15);color:var(--green);border:1px solid rgba(0,200,117,.3)}
+.psbar-sig.sell{background:rgba(232,69,69,.15);color:var(--red);border:1px solid rgba(232,69,69,.3)}
+.psbar-sig.hold{background:rgba(200,162,39,.15);color:var(--gold);border:1px solid rgba(200,162,39,.3)}
+.psbar-sig.watch{background:rgba(26,143,227,.15);color:var(--blue);border:1px solid rgba(26,143,227,.3)}
+.psbar-score{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt3);margin-top:3px;text-align:center}
+
+/* ── TAB BAR ── */
+.tab-bar{display:none;background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.tab-bar.on{display:flex}
+.tab-btn{flex:1;padding:10px 2px;background:none;border:none;border-bottom:2px solid transparent;color:var(--txt3);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .2s;font-family:'JetBrains Mono',monospace}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);background:rgba(26,143,227,.08)}
+.tab-icon{font-size:15px;line-height:1}
+.tab-label{font-size:8px;letter-spacing:1px;white-space:nowrap}
+
+/* ── TAB PANELS ── */
+.tab-panel{display:none}
+.tab-panel.active{display:block}
 </style>
 </head>
 <body>
@@ -299,114 +336,133 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   </div>
   <div class="qs">
     <span class="qs-lbl">よく使う:</span>
-    <div class="qtag" onclick="qs('7203')">7203</div>
-    <div class="qtag" onclick="qs('6758')">6758</div>
-    <div class="qtag" onclick="qs('9984')">9984</div>
-    <div class="qtag" onclick="qs('6861')">6861</div>
-    <div class="qtag" onclick="qs('8306')">8306</div>
-    <div class="qtag" onclick="qs('9432')">9432</div>
-    <div class="qtag" onclick="qs('6367')">6367</div>
-    <div class="qtag" onclick="qs('7974')">7974</div>
+    <div class="qs-tags" id="qsTags"></div>
+    <button class="qs-edit-btn" id="qsEditBtn" onclick="toggleQsEdit()">✎ 編集</button>
   </div>
 </div>
 
 <div class="errmsg" id="errmsg"></div>
 
-<!-- PRICE HEADER -->
-<div class="phdr" id="phdr">
-  <div class="prow">
-    <div>
-      <div class="psym" id="psym">---</div>
-      <div class="pfull" id="pfull">---</div>
-      <div class="pupd" id="pupd">---</div>
-    </div>
-    <div>
-      <div class="pprice" id="pprice">--</div>
-      <div class="pchg" id="pchg">--</div>
-    </div>
+<!-- PRICE SUMMARY BAR -->
+<div class="psbar" id="psbar">
+  <div class="psbar-left">
+    <div class="psbar-code" id="psbarCode">---</div>
+    <div class="psbar-name" id="psbarName">---</div>
+  </div>
+  <div class="psbar-mid">
+    <div class="psbar-price" id="psbarPrice">--</div>
+    <div class="psbar-chg" id="psbarChg">--</div>
+  </div>
+  <div class="psbar-right">
+    <div class="psbar-sig" id="psbarSig">--</div>
+    <div class="psbar-score" id="psbarScore">--%</div>
   </div>
 </div>
 
-<!-- VERDICT -->
-<div class="vcard" id="vcard">
-  <div class="vhdr">
-    <div class="vicon" id="vicon">📊</div>
-    <div style="flex:1;min-width:0">
-      <div class="vtitle" id="vtxt">---</div>
-      <div class="vsub" id="vsub">---</div>
-    </div>
-    <div class="cbar-wrap">
-      <div class="cbar-lbl">CONFIDENCE</div>
-      <div class="cbar"><div class="cbfill" id="cbfill" style="width:0%"></div></div>
-      <div class="cpct" id="cpct">--</div>
+<!-- TAB BAR -->
+<div class="tab-bar" id="tabBar">
+  <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')"><div class="tab-icon">📊</div><div class="tab-label">概要</div></button>
+  <button class="tab-btn" data-tab="chart" onclick="switchTab('chart')"><div class="tab-icon">📈</div><div class="tab-label">チャート</div></button>
+  <button class="tab-btn" data-tab="indicators" onclick="switchTab('indicators')"><div class="tab-icon">🎯</div><div class="tab-label">指標</div></button>
+  <button class="tab-btn" data-tab="financial" onclick="switchTab('financial')"><div class="tab-icon">💹</div><div class="tab-label">財務</div></button>
+  <button class="tab-btn" data-tab="risk" onclick="switchTab('risk')"><div class="tab-icon">⚠</div><div class="tab-label">リスク</div></button>
+</div>
+
+<!-- TAB: 概要 -->
+<div class="tab-panel active" id="tab-overview">
+  <div class="phdr" id="phdr" style="display:none">
+    <div class="prow">
+      <div>
+        <div class="psym" id="psym">---</div>
+        <div class="pfull" id="pfull">---</div>
+        <div class="pupd" id="pupd">---</div>
+      </div>
+      <div>
+        <div class="pprice" id="pprice">--</div>
+        <div class="pchg" id="pchg">--</div>
+      </div>
     </div>
   </div>
-  <div class="vgrid" id="vgrid"></div>
+  <div class="vcard" id="vcard">
+    <div class="vhdr">
+      <div class="vicon" id="vicon">📊</div>
+      <div style="flex:1;min-width:0">
+        <div class="vtitle" id="vtxt">---</div>
+        <div class="vsub" id="vsub">---</div>
+      </div>
+      <div class="cbar-wrap">
+        <div class="cbar-lbl">CONFIDENCE</div>
+        <div class="cbar"><div class="cbfill" id="cbfill" style="width:0%"></div></div>
+        <div class="cpct" id="cpct">--</div>
+      </div>
+    </div>
+    <div class="vgrid" id="vgrid"></div>
+  </div>
+  <div class="card green" id="lscard">
+    <div class="ctitle">ロング / ショート 予測</div>
+    <div id="lsContent"></div>
+  </div>
 </div>
 
-<!-- CHART -->
-<div class="card blue" id="ccard">
-  <div class="ctitle">価格チャート + 一目均衡表 + BB + MA</div>
-  <div class="chart-wrap"><canvas id="pchart"></canvas></div>
+<!-- TAB: チャート -->
+<div class="tab-panel" id="tab-chart">
+  <div class="card blue" id="ccard">
+    <div class="ctitle">価格チャート + 一目均衡表 + BB + MA</div>
+    <div class="chart-wrap"><canvas id="pchart"></canvas></div>
+  </div>
+  <div class="card" id="pcard">
+    <div class="ctitle">チャートパターン</div>
+    <div id="patContent"></div>
+  </div>
 </div>
 
-<!-- LONG/SHORT PREDICTION -->
-<div class="card green" id="lscard">
-  <div class="ctitle">ロング / ショート 予測</div>
-  <div id="lsContent"></div>
+<!-- TAB: 指標 -->
+<div class="tab-panel" id="tab-indicators">
+  <div class="ind-section-title">■ モメンタム指標</div>
+  <div class="igrid">
+    <div class="icard" id="ic-rsi"><div class="ihdr"><div class="iname">RSI (14)</div><div class="ibadge" id="rsi-b">---</div></div><div class="ival" id="rsi-v">--</div><div class="idesc" id="rsi-d">---</div><div class="ibar"><div class="ibfill" id="rsi-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">70超=買われすぎ(売り)／30未満=売られすぎ(買い)／50付近=中立</div></div>
+    <div class="icard" id="ic-macd"><div class="ihdr"><div class="iname">MACD</div><div class="ibadge" id="macd-b">---</div></div><div class="ival" id="macd-v">--</div><div class="idesc" id="macd-d">---</div><div class="ibar"><div class="ibfill" id="macd-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ゴールデンクロス=買い強シグナル／デッドクロス=売り強シグナル</div></div>
+    <div class="icard" id="ic-stoch"><div class="ihdr"><div class="iname">ストキャスティクス</div><div class="ibadge" id="stoch-b">---</div></div><div class="ival" id="stoch-v">--</div><div class="idesc" id="stoch-d">---</div><div class="ibar"><div class="ibfill" id="stoch-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">K線が80超=過熱・売り候補／20未満=売られすぎ・買い候補</div></div>
+  </div>
+  <div class="ind-section-title">■ トレンド指標</div>
+  <div class="igrid">
+    <div class="icard" id="ic-bb"><div class="ihdr"><div class="iname">ボリンジャーバンド</div><div class="ibadge" id="bb-b">---</div></div><div class="ival" id="bb-v">--</div><div class="idesc" id="bb-d">---</div><div class="ibar"><div class="ibfill" id="bb-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">上限=過熱・売り候補／下限=売られすぎ・買い候補／σ=ボラティリティ</div></div>
+    <div class="icard" id="ic-ma"><div class="ihdr"><div class="iname">移動平均線</div><div class="ibadge" id="ma-b">---</div></div><div class="ival" id="ma-v">--</div><div class="idesc" id="ma-d">---</div><div class="ibar"><div class="ibfill" id="ma-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">5MA&gt;25MA&gt;75MA=パーフェクトオーダー(最強上昇)／逆順=最強下降</div></div>
+    <div class="icard" id="ic-ichimoku"><div class="ihdr"><div class="iname">一目均衡表</div><div class="ibadge" id="ichimoku-b">---</div></div><div class="ival" id="ichimoku-v">--</div><div class="idesc" id="ichimoku-d">---</div><div class="ibar"><div class="ibfill" id="ichimoku-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">雲の上=強い上昇トレンド／雲の下=強い下降トレンド／雲中=転換期</div></div>
+    <div class="icard" id="ic-adx"><div class="ihdr"><div class="iname">ADX (トレンド強度)</div><div class="ibadge" id="adx-b">---</div></div><div class="ival" id="adx-v">--</div><div class="idesc" id="adx-d">---</div><div class="ibar"><div class="ibfill" id="adx-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ADX25超=強トレンド／25未満=レンジ相場。+DI&gt;-DI=上昇／-DI&gt;+DI=下降</div></div>
+  </div>
+  <div class="ind-section-title">■ 出来高・価格水準</div>
+  <div class="igrid">
+    <div class="icard" id="ic-vol"><div class="ihdr"><div class="iname">出来高</div><div class="ibadge" id="vol-b">---</div></div><div class="ival" id="vol-v">--</div><div class="idesc" id="vol-d">---</div><div class="ibar"><div class="ibfill" id="vol-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">平均の1.5倍超=トレンド強化／減少=エネルギー低下・ブレイク前兆</div></div>
+    <div class="icard" id="ic-vwap"><div class="ihdr"><div class="iname">VWAP</div><div class="ibadge" id="vwap-b">---</div></div><div class="ival" id="vwap-v">--</div><div class="idesc" id="vwap-d">---</div><div class="ibar"><div class="ibfill" id="vwap-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">出来高加重平均価格。機関投資家の基準値。現値&gt;VWAP=買い優勢</div></div>
+    <div class="icard" id="ic-obv"><div class="ihdr"><div class="iname">OBV (出来高トレンド)</div><div class="ibadge" id="obv-b">---</div></div><div class="ival" id="obv-v">--</div><div class="idesc" id="obv-d">---</div><div class="ibar"><div class="ibfill" id="obv-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">OBV上昇+価格上昇=本物のトレンド／OBV乖離=ダイバージェンス警戒</div></div>
+    <div class="icard" id="ic-fib"><div class="ihdr"><div class="iname">フィボナッチ</div><div class="ibadge" id="fib-b">---</div></div><div class="ival" id="fib-v">--</div><div class="idesc" id="fib-d">---</div><div class="ibar"><div class="ibfill" id="fib-f" style="width:50%;background:var(--gold)"></div></div><div class="iexplain">主要戻し水準: 23.6%・38.2%・50%・61.8%・78.6%。押し目・戻りの目安</div></div>
+  </div>
+  <div class="card" id="scard">
+    <div class="ctitle">シグナル詳細</div>
+    <div class="slist" id="slist"></div>
+  </div>
 </div>
 
-<!-- NEWS -->
-<div class="card orange" id="newscard">
-  <div class="ctitle">最新ニュース</div>
-  <div class="news-list" id="newsList"></div>
+<!-- TAB: 財務 -->
+<div class="tab-panel" id="tab-financial">
+  <div class="card orange" id="newscard">
+    <div class="ctitle">最新ニュース</div>
+    <div class="news-list" id="newsList"></div>
+  </div>
+  <div class="card" id="fincard">
+    <div class="ctitle">財務分析</div>
+    <div class="fin-grid" id="finGrid"></div>
+    <div style="font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:8px" id="finNote"></div>
+  </div>
 </div>
 
-<!-- FINANCIAL -->
-<div class="card" id="fincard">
-  <div class="ctitle">財務分析</div>
-  <div class="fin-grid" id="finGrid"></div>
-  <div style="font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:8px" id="finNote"></div>
-</div>
-
-<!-- CHART PATTERNS -->
-<div class="card" id="pcard">
-  <div class="ctitle">チャートパターン</div>
-  <div id="patContent"></div>
-</div>
-
-<!-- INDICATORS -->
-<div class="ind-section-title">■ モメンタム指標</div>
-<div class="igrid">
-  <div class="icard" id="ic-rsi"><div class="ihdr"><div class="iname">RSI (14)</div><div class="ibadge" id="rsi-b">---</div></div><div class="ival" id="rsi-v">--</div><div class="idesc" id="rsi-d">---</div><div class="ibar"><div class="ibfill" id="rsi-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">70超=買われすぎ(売り)／30未満=売られすぎ(買い)／50付近=中立</div></div>
-  <div class="icard" id="ic-macd"><div class="ihdr"><div class="iname">MACD</div><div class="ibadge" id="macd-b">---</div></div><div class="ival" id="macd-v">--</div><div class="idesc" id="macd-d">---</div><div class="ibar"><div class="ibfill" id="macd-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ゴールデンクロス=買い強シグナル／デッドクロス=売り強シグナル</div></div>
-  <div class="icard" id="ic-stoch"><div class="ihdr"><div class="iname">ストキャスティクス</div><div class="ibadge" id="stoch-b">---</div></div><div class="ival" id="stoch-v">--</div><div class="idesc" id="stoch-d">---</div><div class="ibar"><div class="ibfill" id="stoch-f" style="width:0%;background:var(--blue)"></div></div><div class="iexplain">K線が80超=過熱・売り候補／20未満=売られすぎ・買い候補</div></div>
-</div>
-<div class="ind-section-title">■ トレンド指標</div>
-<div class="igrid">
-  <div class="icard" id="ic-bb"><div class="ihdr"><div class="iname">ボリンジャーバンド</div><div class="ibadge" id="bb-b">---</div></div><div class="ival" id="bb-v">--</div><div class="idesc" id="bb-d">---</div><div class="ibar"><div class="ibfill" id="bb-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">上限=過熱・売り候補／下限=売られすぎ・買い候補／σ=ボラティリティ</div></div>
-  <div class="icard" id="ic-ma"><div class="ihdr"><div class="iname">移動平均線</div><div class="ibadge" id="ma-b">---</div></div><div class="ival" id="ma-v">--</div><div class="idesc" id="ma-d">---</div><div class="ibar"><div class="ibfill" id="ma-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">5MA&gt;25MA&gt;75MA=パーフェクトオーダー(最強上昇)／逆順=最強下降</div></div>
-  <div class="icard" id="ic-ichimoku"><div class="ihdr"><div class="iname">一目均衡表</div><div class="ibadge" id="ichimoku-b">---</div></div><div class="ival" id="ichimoku-v">--</div><div class="idesc" id="ichimoku-d">---</div><div class="ibar"><div class="ibfill" id="ichimoku-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">雲の上=強い上昇トレンド／雲の下=強い下降トレンド／雲中=転換期</div></div>
-  <div class="icard" id="ic-adx"><div class="ihdr"><div class="iname">ADX (トレンド強度)</div><div class="ibadge" id="adx-b">---</div></div><div class="ival" id="adx-v">--</div><div class="idesc" id="adx-d">---</div><div class="ibar"><div class="ibfill" id="adx-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">ADX25超=強トレンド／25未満=レンジ相場。+DI&gt;-DI=上昇／-DI&gt;+DI=下降</div></div>
-</div>
-<div class="ind-section-title">■ 出来高・価格水準</div>
-<div class="igrid">
-  <div class="icard" id="ic-vol"><div class="ihdr"><div class="iname">出来高</div><div class="ibadge" id="vol-b">---</div></div><div class="ival" id="vol-v">--</div><div class="idesc" id="vol-d">---</div><div class="ibar"><div class="ibfill" id="vol-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">平均の1.5倍超=トレンド強化／減少=エネルギー低下・ブレイク前兆</div></div>
-  <div class="icard" id="ic-vwap"><div class="ihdr"><div class="iname">VWAP</div><div class="ibadge" id="vwap-b">---</div></div><div class="ival" id="vwap-v">--</div><div class="idesc" id="vwap-d">---</div><div class="ibar"><div class="ibfill" id="vwap-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">出来高加重平均価格。機関投資家の基準値。現値&gt;VWAP=買い優勢</div></div>
-  <div class="icard" id="ic-obv"><div class="ihdr"><div class="iname">OBV (出来高トレンド)</div><div class="ibadge" id="obv-b">---</div></div><div class="ival" id="obv-v">--</div><div class="idesc" id="obv-d">---</div><div class="ibar"><div class="ibfill" id="obv-f" style="width:50%;background:var(--blue)"></div></div><div class="iexplain">OBV上昇+価格上昇=本物のトレンド／OBV乖離=ダイバージェンス警戒</div></div>
-  <div class="icard" id="ic-fib"><div class="ihdr"><div class="iname">フィボナッチ</div><div class="ibadge" id="fib-b">---</div></div><div class="ival" id="fib-v">--</div><div class="idesc" id="fib-d">---</div><div class="ibar"><div class="ibfill" id="fib-f" style="width:50%;background:var(--gold)"></div></div><div class="iexplain">主要戻し水準: 23.6%・38.2%・50%・61.8%・78.6%。押し目・戻りの目安</div></div>
-</div>
-
-<!-- SIGNALS -->
-<div class="card" id="scard">
-  <div class="ctitle">シグナル詳細</div>
-  <div class="slist" id="slist"></div>
-</div>
-
-<!-- RISK -->
-<div class="card" id="rcard">
-  <div class="ctitle">リスク管理 / エントリー</div>
-  <div class="rgrid" id="rgrid"></div>
+<!-- TAB: リスク -->
+<div class="tab-panel" id="tab-risk">
+  <div class="card" id="rcard">
+    <div class="ctitle">リスク管理 / エントリー</div>
+    <div class="rgrid" id="rgrid"></div>
+  </div>
 </div>
 
 <div class="disc">
@@ -455,6 +511,43 @@ setInterval(function(){
 // ── HELPERS ──────────────────────────────────────
 function setLdg(t,s){document.getElementById('ldgTxt').textContent=t||'';document.getElementById('ldgSub').textContent=s||'';}
 function qs(s){document.getElementById('sinput').value=s;analyze();}
+var QS_KEY='stockedge_quick';
+var QS_DEFAULT=['7203','6758','9984','6861','8306','9432','6367','7974'];
+var _qsEditing=false;
+function qsLoad(){try{var v=JSON.parse(localStorage.getItem(QS_KEY));return Array.isArray(v)&&v.length?v:QS_DEFAULT.slice();}catch(e){return QS_DEFAULT.slice();}}
+function qsSave(arr){localStorage.setItem(QS_KEY,JSON.stringify(arr));}
+function renderQsTags(){
+  var arr=qsLoad();
+  var el=document.getElementById('qsTags');
+  if(!el)return;
+  if(_qsEditing){
+    el.innerHTML=arr.map(function(c){
+      return '<span class="qtag editing">'+c+'<span class="qtag-del" onclick="removeQsTag(\''+c+'\')">×</span></span>';
+    }).join('')+'<span class="qtag qtag-add" onclick="addQsTag()">＋追加</span>';
+  } else {
+    el.innerHTML=arr.map(function(c){
+      return '<div class="qtag" onclick="qs(\''+c+'\')">'+c+'</div>';
+    }).join('');
+  }
+}
+function toggleQsEdit(){
+  _qsEditing=!_qsEditing;
+  var btn=document.getElementById('qsEditBtn');
+  if(btn)btn.textContent=_qsEditing?'✓ 完了':'✎ 編集';
+  renderQsTags();
+}
+function removeQsTag(code){
+  qsSave(qsLoad().filter(function(c){return c!==code;}));
+  renderQsTags();
+}
+function addQsTag(){
+  var code=(prompt('追加する銘柄コード（4桁数字）:')||'').trim();
+  if(!code)return;
+  if(!/^\d{4}$/.test(code)){alert('4桁の銘柄コードを入力してください');return;}
+  var arr=qsLoad();
+  if(!arr.includes(code)){arr.push(code);qsSave(arr);}
+  renderQsTags();
+}
 function showErr(msg){var el=document.getElementById('errmsg');el.className='errmsg';el.textContent='⚠ '+msg;el.style.display='block';}
 function hideErr(){document.getElementById('errmsg').style.display='none';}
 function show(id){var el=document.getElementById(id);if(el)el.style.display='block';}
@@ -981,6 +1074,17 @@ function setInd(id,val,badge,badgeCls,desc,fillW,fillC){
   document.getElementById(id+'-d').textContent=desc;
   document.getElementById(id+'-f').style.width=fillW+'%';
   document.getElementById(id+'-f').style.background=fillC;
+}
+
+var _currentTab='overview';
+function switchTab(name){
+  _currentTab=name;
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  var panel=document.getElementById('tab-'+name);
+  if(panel)panel.classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(function(b){if(b.dataset.tab===name)b.classList.add('active');});
+  if(name==='chart'&&chartInst){setTimeout(function(){chartInst.resize();},60);}
 }
 
 // ── RENDER: LONG/SHORT ──────────────────────────

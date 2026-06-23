@@ -460,18 +460,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 </div>
 
 <!-- TAB BAR -->
-<div class="tab-bar" id="tabBar">
-  <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')"><div class="tab-icon">📊</div><div class="tab-label">概要</div></button>
+<div class="tab-bar on" id="tabBar">
+  <button class="tab-btn" data-tab="overview" onclick="switchTab('overview')"><div class="tab-icon">📊</div><div class="tab-label">概要</div></button>
   <button class="tab-btn" data-tab="chart" onclick="switchTab('chart')"><div class="tab-icon">📈</div><div class="tab-label">チャート</div></button>
   <button class="tab-btn" data-tab="indicators" onclick="switchTab('indicators')"><div class="tab-icon">🎯</div><div class="tab-label">指標</div></button>
   <button class="tab-btn" data-tab="financial" onclick="switchTab('financial')"><div class="tab-icon">💹</div><div class="tab-label">財務</div></button>
   <button class="tab-btn" data-tab="risk" onclick="switchTab('risk')"><div class="tab-icon">⚡</div><div class="tab-label">トレード</div></button>
-  <button class="tab-btn" data-tab="scanner" onclick="switchTab('scanner')"><div class="tab-icon">🔍</div><div class="tab-label">スキャナー</div></button>
+  <button class="tab-btn active" data-tab="scanner" onclick="switchTab('scanner')"><div class="tab-icon">🔍</div><div class="tab-label">スキャナー</div></button>
 </div>
 
 <!-- TAB: 概要 -->
-<div class="tab-panel active" id="tab-overview">
-  <div class="phdr" id="phdr" style="display:none">
+<div class="tab-panel" id="tab-overview">
     <div class="prow">
       <div>
         <div class="psym" id="psym">---</div>
@@ -700,6 +699,14 @@ function addQsTag(){
   renderQsTags();
 }
 renderQsTags();
+// スキャナーをデフォルトタブとして表示
+(function(){
+  var panels = document.querySelectorAll('.tab-panel');
+  panels.forEach(function(p){ p.classList.remove('active'); });
+  var sp = document.getElementById('tab-scanner');
+  if(sp) sp.classList.add('active');
+})();
+
 function showErr(msg){var el=document.getElementById('errmsg');el.className='errmsg';el.textContent='⚠ '+msg;el.style.display='block';}
 function hideErr(){document.getElementById('errmsg').style.display='none';}
 function show(id){var el=document.getElementById(id);if(el)el.style.display='block';}

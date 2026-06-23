@@ -302,16 +302,43 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .tab-label{font-size:8px;letter-spacing:1px;white-space:nowrap}
 
 /* ── SCANNER TAB ── */
-.scanner-placeholder{text-align:center;padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:16px}
-.scanner-icon{font-size:48px;line-height:1}
-.scanner-title{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;letter-spacing:3px;color:var(--txt)}
-.scanner-desc{font-size:12px;color:var(--txt2);line-height:1.8;max-width:300px}
-.scanner-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(140,82,255,.12);border:1px solid rgba(140,82,255,.35);border-radius:100px;padding:6px 16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--purple);letter-spacing:1px}
-.scanner-features{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:320px;text-align:left}
-.scanner-feat{background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px}
-.scanner-feat-icon{font-size:18px;margin-bottom:4px}
-.scanner-feat-name{font-size:10px;font-weight:600;color:var(--txt);margin-bottom:2px}
-.scanner-feat-desc{font-size:9px;color:var(--txt3);line-height:1.5}
+.scanner-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.scan-trigger-btn{background:linear-gradient(135deg,var(--purple),var(--blue));border:none;color:#fff;padding:7px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:.2s;letter-spacing:.5px;display:flex;align-items:center;gap:5px}
+.scan-trigger-btn:active{transform:scale(.95);opacity:.8}
+.scan-trigger-btn:disabled{opacity:.5;cursor:not-allowed}
+.scanner-meta{font-size:10px;color:var(--txt3);margin-bottom:10px;font-family:'JetBrains Mono',monospace;line-height:1.6}
+.scanner-filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;margin-bottom:12px}
+.scanner-filters::-webkit-scrollbar{display:none}
+.sf-btn{flex-shrink:0;border:1px solid var(--bdr);background:rgba(255,255,255,.04);color:var(--txt3);padding:5px 12px;border-radius:100px;font-size:10px;font-weight:600;cursor:pointer;transition:.2s;white-space:nowrap;font-family:'JetBrains Mono',monospace}
+.sf-btn.active,.sf-btn:active{background:rgba(255,255,255,.12);color:var(--txt);border-color:rgba(255,255,255,.3)}
+.sf-btn[data-filter="STRONG BUY"]{color:var(--green)}
+.sf-btn[data-filter="BUY"]{color:#4fc3f7}
+.sf-btn[data-filter="SELL"]{color:var(--red)}
+.sf-btn[data-filter="STRONG SELL"]{color:#ff6b6b}
+.scanner-item{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--bdr);cursor:pointer;transition:.15s;border-radius:4px}
+.scanner-item:last-child{border-bottom:none}
+.scanner-item:active{background:rgba(255,255,255,.04);padding-left:6px;padding-right:6px}
+.si-rank{width:22px;font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;flex-shrink:0;text-align:center}
+.si-rank.top3{color:var(--gold);font-weight:700}
+.si-info{flex:1;min-width:0}
+.si-code{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--blue);font-weight:600;line-height:1.3}
+.si-name{font-size:11px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;line-height:1.3}
+.si-score-wrap{width:36px;text-align:center;flex-shrink:0}
+.si-score-num{font-size:17px;font-weight:700;font-family:'Orbitron',monospace;line-height:1;color:var(--gold)}
+.si-score-lbl{font-size:7px;color:var(--txt3);letter-spacing:1px;margin-top:1px}
+.si-signal{font-size:8px;padding:3px 7px;flex-shrink:0;border-radius:20px;font-weight:700;letter-spacing:.3px}
+.si-price-wrap{text-align:right;flex-shrink:0;min-width:60px}
+.si-price-num{font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--txt);line-height:1.3}
+.si-chg{font-size:10px;font-family:'JetBrains Mono',monospace;line-height:1.3}
+.si-chg.up{color:var(--green)}
+.si-chg.dn{color:var(--red)}
+.si-vol-wrap{text-align:center;width:34px;flex-shrink:0}
+.si-vol-num{font-size:11px;font-weight:600;color:var(--orange);line-height:1.3}
+.si-vol-lbl{font-size:7px;color:var(--txt3);letter-spacing:.5px;line-height:1.3}
+.scanner-empty{text-align:center;padding:40px 20px;color:var(--txt3);font-size:13px;line-height:2}
+.scanner-loading{text-align:center;padding:40px 20px;color:var(--txt2);font-size:12px}
+.si-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.si-tag{font-size:8px;background:rgba(245,181,53,.12);color:var(--gold);border-radius:4px;padding:1px 5px;border:1px solid rgba(245,181,53,.25)}
 
 /* ── TAB PANELS ── */
 .tab-panel{display:none}
@@ -568,21 +595,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 <!-- TAB: スキャナー -->
 <div class="tab-panel" id="tab-scanner">
   <div class="card" style="display:block">
-    <div class="ctitle">マーケットスキャナー</div>
-    <div class="scanner-placeholder">
-      <div class="scanner-icon">🔍</div>
-      <div class="scanner-badge">⚡ COMING SOON — Supabase連携</div>
-      <div class="scanner-title">TOP20 シグナルランキング</div>
-      <div class="scanner-desc">東証プライム・スタンダード・グロース全銘柄を毎日スキャン。Strong Buy シグナルを自動検出してランキング表示します。</div>
-      <div class="scanner-features">
-        <div class="scanner-feat"><div class="scanner-feat-icon">🏆</div><div class="scanner-feat-name">デイリーTOP20</div><div class="scanner-feat-desc">スコア上位銘柄を毎朝8時に更新</div></div>
-        <div class="scanner-feat"><div class="scanner-feat-icon">🚀</div><div class="scanner-feat-name">出来高急増</div><div class="scanner-feat-desc">前日比200%超の出来高急増銘柄</div></div>
-        <div class="scanner-feat"><div class="scanner-feat-icon">📅</div><div class="scanner-feat-name">決算アラート</div><div class="scanner-feat-desc">7日以内に決算が迫る銘柄</div></div>
-        <div class="scanner-feat"><div class="scanner-feat-icon">📊</div><div class="scanner-feat-name">年初来高値</div><div class="scanner-feat-desc">52週高値を更新中の銘柄</div></div>
-        <div class="scanner-feat"><div class="scanner-feat-icon">🔔</div><div class="scanner-feat-name">Telegram通知</div><div class="scanner-feat-desc">Strong Buy 時に即時プッシュ</div></div>
-        <div class="scanner-feat"><div class="scanner-feat-icon">📈</div><div class="scanner-feat-name">バックテスト</div><div class="scanner-feat-desc">過去3年の勝率・PF・最大DD</div></div>
-      </div>
-      <div style="font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:8px;line-height:2">Supabase + Cloudflare Workers Cron で実装予定<br>毎日 JST 08:00 に東証3,800銘柄を自動スキャン</div>
+    <div class="scanner-header">
+      <div class="ctitle" style="margin:0">📡 シグナルランキング</div>
+      <button class="scan-trigger-btn" id="scanTriggerBtn" onclick="triggerScan()">
+        <span id="scanTriggerIcon">⚡</span><span id="scanTriggerTxt">今すぐスキャン</span>
+      </button>
+    </div>
+    <div class="scanner-meta" id="scannerMeta">読み込み中...</div>
+    <div class="scanner-filters" id="scannerFilters">
+      <button class="sf-btn active" data-filter="" onclick="setScanFilter('',this)">ALL</button>
+      <button class="sf-btn" data-filter="STRONG BUY" onclick="setScanFilter('STRONG BUY',this)">🚀 STRONG BUY</button>
+      <button class="sf-btn" data-filter="BUY" onclick="setScanFilter('BUY',this)">📈 BUY</button>
+      <button class="sf-btn" data-filter="NEUTRAL" onclick="setScanFilter('NEUTRAL',this)">➡ NEUTRAL</button>
+      <button class="sf-btn" data-filter="SELL" onclick="setScanFilter('SELL',this)">📉 SELL</button>
+      <button class="sf-btn" data-filter="STRONG SELL" onclick="setScanFilter('STRONG SELL',this)">⚠ STRONG SELL</button>
+    </div>
+    <div class="scanner-list" id="scannerList">
+      <div class="scanner-loading">データを読み込み中...</div>
     </div>
   </div>
 </div>
@@ -1363,6 +1392,7 @@ function switchTab(name){
   if(panel)panel.classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(function(b){if(b.dataset.tab===name)b.classList.add('active');});
   if(name==='chart'&&chartInst){setTimeout(function(){chartInst.resize();},60);}
+  if(name==='scanner'){loadScanner();}
 }
 
 // ── RENDER: LONG/SHORT ──────────────────────────
@@ -2330,6 +2360,150 @@ function showSuccessMsg(msg){
   el.textContent = '✓ ' + msg;
   el.style.display = 'block';
   setTimeout(function(){ el.style.display='none'; el.className='errmsg'; }, 3500);
+}
+
+// ── SCANNER ──────────────────────────────────────────────────────────────
+var _scanFilter = '';
+var _scanData = [];
+var _scannerLoaded = false;
+
+function loadScanner(force) {
+  if (_scannerLoaded && !force) return;
+  _scannerLoaded = true;
+  var list = document.getElementById('scannerList');
+  var meta = document.getElementById('scannerMeta');
+  if (!list) return;
+  list.innerHTML = '<div class="scanner-loading">データを読み込み中...</div>';
+  if (meta) meta.textContent = '読み込み中...';
+
+  var url = '/api/scanner?limit=50';
+  if (_scanFilter) url += '&signal=' + encodeURIComponent(_scanFilter);
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data) {
+    _scanData = data.results || [];
+    var date = data.date || null;
+    var msgParts = [];
+    if (date) msgParts.push('スキャン日: ' + date);
+    msgParts.push(_scanData.length + '銘柄');
+    var sbCount = _scanData.filter(function(r){ return r.signal === 'STRONG BUY'; }).length;
+    if (sbCount > 0) msgParts.push('🚀 STRONG BUY: ' + sbCount + '銘柄');
+    if (meta) meta.textContent = msgParts.join('  |  ');
+    if (!date && _scanData.length === 0) {
+      list.innerHTML = '<div class="scanner-empty">スキャンデータがありません。<br>「今すぐスキャン」ボタンでスキャンを開始してください。</div>';
+      return;
+    }
+    renderScannerList();
+  }).catch(function(e) {
+    if (list) list.innerHTML = '<div class="scanner-empty">データ取得エラー<br>' + e.message + '</div>';
+    if (meta) meta.textContent = 'エラー: ' + e.message;
+    _scannerLoaded = false;
+  });
+}
+
+function renderScannerList() {
+  var list = document.getElementById('scannerList');
+  if (!list) return;
+  var filtered = _scanFilter
+    ? _scanData.filter(function(r){ return r.signal === _scanFilter; })
+    : _scanData;
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="scanner-empty">該当銘柄なし</div>';
+    return;
+  }
+
+  var SIG_MAP = {
+    'STRONG BUY':  { cls:'strong-buy',  short:'🚀 S-BUY' },
+    'BUY':         { cls:'buy',          short:'📈 BUY' },
+    'NEUTRAL':     { cls:'neutral',      short:'➡ NEU' },
+    'SELL':        { cls:'sell',         short:'📉 SELL' },
+    'STRONG SELL': { cls:'strong-sell',  short:'⚠ S-SELL' }
+  };
+
+  var html = '';
+  filtered.forEach(function(r, i) {
+    var rank = i + 1;
+    var rankCls = rank <= 3 ? ' top3' : '';
+    var sigInfo = SIG_MAP[r.signal] || { cls:'neutral', short:r.signal };
+    var chgAbs = Math.abs(r.change_pct || 0);
+    var chgCls = (r.change_pct || 0) >= 0 ? 'up' : 'dn';
+    var chgSign = (r.change_pct || 0) >= 0 ? '+' : '-';
+    var volTxt = r.volume_ratio ? r.volume_ratio.toFixed(1) + 'x' : '-';
+    var priceTxt = r.price ? Number(r.price).toLocaleString() : '-';
+
+    var tags = [];
+    if (r.near_high52w) tags.push('52W高値圏');
+    if (r.macd_gc) tags.push('MACD-GC');
+    if (r.volume_ratio >= 2) tags.push('出来高急増');
+
+    html += '<div class="scanner-item" onclick="openScannerStock(\'' + r.code + '\',\'' + (r.name||'').replace(/'/g,"\\'") + '\')">';
+    html += '<div class="si-rank' + rankCls + '">' + rank + '</div>';
+    html += '<div class="si-info"><div class="si-code">' + r.code + '</div><div class="si-name">' + (r.name||r.code) + '</div>';
+    if (tags.length > 0) html += '<div class="si-badges">' + tags.map(function(t){ return '<span class="si-tag">'+t+'</span>'; }).join('') + '</div>';
+    html += '</div>';
+    html += '<div class="si-score-wrap"><div class="si-score-num">' + r.score + '</div><div class="si-score-lbl">SCORE</div></div>';
+    html += '<div class="signal-badge si-signal ' + sigInfo.cls + '">' + sigInfo.short + '</div>';
+    html += '<div class="si-price-wrap"><div class="si-price-num">¥' + priceTxt + '</div><div class="si-chg ' + chgCls + '">' + chgSign + chgAbs.toFixed(2) + '%</div></div>';
+    html += '<div class="si-vol-wrap"><div class="si-vol-num">' + volTxt + '</div><div class="si-vol-lbl">出来高</div></div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function setScanFilter(filter, btn) {
+  _scanFilter = filter;
+  document.querySelectorAll('.sf-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  if (_scannerLoaded) {
+    renderScannerList();
+  } else {
+    loadScanner(true);
+  }
+}
+
+function openScannerStock(code, name) {
+  switchTab('overview');
+  var inp = document.getElementById('stockCode');
+  if (inp) inp.value = code;
+  analyze();
+}
+
+function triggerScan() {
+  var btn = document.getElementById('scanTriggerBtn');
+  var icon = document.getElementById('scanTriggerIcon');
+  var txt = document.getElementById('scanTriggerTxt');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  icon.textContent = '⏳';
+  txt.textContent = 'スキャン中...';
+
+  fetch('/api/scan-trigger', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        icon.textContent = '✓';
+        txt.textContent = data.scanned + '銘柄完了';
+        _scannerLoaded = false;
+        setTimeout(function() {
+          icon.textContent = '⚡';
+          txt.textContent = '今すぐスキャン';
+          btn.disabled = false;
+          loadScanner(true);
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'エラー');
+      }
+    })
+    .catch(function(e) {
+      icon.textContent = '✗';
+      txt.textContent = 'エラー';
+      alert('スキャン失敗: ' + e.message);
+      setTimeout(function() {
+        icon.textContent = '⚡';
+        txt.textContent = '今すぐスキャン';
+        btn.disabled = false;
+      }, 2500);
+    });
 }
 
 </script>

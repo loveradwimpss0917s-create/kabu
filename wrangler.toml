@@ -6,3 +6,10 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "."
 binding = "ASSETS"
+
+[triggers]
+crons = ["0 23 * * *"]
+
+[vars]
+SUPABASE_URL = "https://fhpwmafnbzmtjemldmcy.supabase.co"
+SUPABASE_ANON_KEY = "sb_publishable_zj4PdCDhK1i9F2a49Tlddg_D5hlPIg9"

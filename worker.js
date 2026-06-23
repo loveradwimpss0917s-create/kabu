@@ -307,8 +307,10 @@ async function scanStock(code, name, crumb, cookie) {
   const headers = { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com' };
   if (cookie) headers['Cookie'] = cookie;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
   try {
-    const res = await fetch(targetUrl, { headers });
+    const res = await fetch(targetUrl, { headers, signal: controller.signal });
     if (!res.ok) return null;
     const data = await res.json();
     const chart = data?.chart?.result?.[0];
@@ -350,6 +352,8 @@ async function scanStock(code, name, crumb, cookie) {
   } catch (e) {
     console.error(`scanStock ${code} error:`, e.message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -358,13 +362,16 @@ async function runScanner(env) {
   if (!crumb) throw new Error('crumb取得失敗');
 
   const results = [];
-  const batchSize = 5;
+  const batchSize = 10;
+  const scanStart = Date.now();
+  const MAX_SCAN_MS = 24000;
   for (let i = 0; i < SCAN_STOCKS.length; i += batchSize) {
+    if (Date.now() - scanStart > MAX_SCAN_MS) break;
     const batch = SCAN_STOCKS.slice(i, i + batchSize);
     const batchRes = await Promise.all(batch.map(([code, name]) => scanStock(code, name, crumb, cookie)));
     for (const r of batchRes) { if (r) results.push(r); }
-    if (i + batchSize < SCAN_STOCKS.length) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+    if (i + batchSize < SCAN_STOCKS.length && Date.now() - scanStart < MAX_SCAN_MS - 500) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
 

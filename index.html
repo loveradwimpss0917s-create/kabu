@@ -2514,9 +2514,13 @@ function triggerScan() {
   icon.textContent = '⏳';
   txt.textContent = 'スキャン中...';
 
-  fetch('/api/scan-trigger', { method: 'POST' })
+  var scanAbort = new AbortController();
+  var scanTimer = setTimeout(function() { scanAbort.abort(); }, 50000);
+
+  fetch('/api/scan-trigger', { method: 'POST', signal: scanAbort.signal })
     .then(function(r){ return r.json(); })
     .then(function(data) {
+      clearTimeout(scanTimer);
       if (data.ok) {
         icon.textContent = '✓';
         txt.textContent = data.scanned + '銘柄完了';
@@ -2532,9 +2536,11 @@ function triggerScan() {
       }
     })
     .catch(function(e) {
+      clearTimeout(scanTimer);
       icon.textContent = '✗';
       txt.textContent = 'エラー';
-      alert('スキャン失敗: ' + e.message);
+      var msg = e.name === 'AbortError' ? 'タイムアウト (50秒)' : e.message;
+      alert('スキャン失敗: ' + msg);
       setTimeout(function() {
         icon.textContent = '⚡';
         txt.textContent = '今すぐスキャン';

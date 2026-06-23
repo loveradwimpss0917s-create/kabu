@@ -2379,24 +2379,53 @@ function loadScanner(force) {
   var url = '/api/scanner?limit=50';
   if (_scanFilter) url += '&signal=' + encodeURIComponent(_scanFilter);
 
-  fetch(url).then(function(r){ return r.json(); }).then(function(data) {
+  var done = false;
+  var timer = setTimeout(function() {
+    if (!done) {
+      done = true;
+      _scannerLoaded = false;
+      if (list) list.innerHTML = '<div class="scanner-empty">⏱ 接続タイムアウト<br>「今すぐスキャン」を押すか、ページをリロードしてください。</div>';
+      if (meta) meta.textContent = 'タイムアウト';
+    }
+  }, 10000);
+
+  fetch(url).then(function(r) {
+    return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+  }).then(function(res) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    var data = res.data || {};
     _scanData = data.results || [];
     var date = data.date || null;
+
+    if (!date && _scanData.length === 0) {
+      _scannerLoaded = false;
+      if (meta) meta.textContent = 'スキャン未実行';
+      list.innerHTML =
+        '<div class="scanner-empty">' +
+        '📡 スキャンデータがありません<br><br>' +
+        '「⚡ 今すぐスキャン」ボタンを押して<br>最初のスキャンを実行してください。<br><br>' +
+        '<span style="font-size:10px;color:var(--txt3)">毎日 08:00 JST に自動更新されます</span>' +
+        '</div>';
+      return;
+    }
+
     var msgParts = [];
     if (date) msgParts.push('スキャン日: ' + date);
     msgParts.push(_scanData.length + '銘柄');
-    var sbCount = _scanData.filter(function(r){ return r.signal === 'STRONG BUY'; }).length;
+    var sbCount = _scanData.filter(function(x){ return x.signal === 'STRONG BUY'; }).length;
     if (sbCount > 0) msgParts.push('🚀 STRONG BUY: ' + sbCount + '銘柄');
     if (meta) meta.textContent = msgParts.join('  |  ');
-    if (!date && _scanData.length === 0) {
-      list.innerHTML = '<div class="scanner-empty">スキャンデータがありません。<br>「今すぐスキャン」ボタンでスキャンを開始してください。</div>';
-      return;
-    }
     renderScannerList();
   }).catch(function(e) {
-    if (list) list.innerHTML = '<div class="scanner-empty">データ取得エラー<br>' + e.message + '</div>';
-    if (meta) meta.textContent = 'エラー: ' + e.message;
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
     _scannerLoaded = false;
+    var errMsg = e.message || '不明なエラー';
+    if (list) list.innerHTML = '<div class="scanner-empty">⚠ データ取得エラー<br><span style="font-size:10px;color:var(--txt3)">' + errMsg + '</span></div>';
+    if (meta) meta.textContent = 'エラー';
   });
 }
 

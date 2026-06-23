@@ -12,4 +12,4 @@ crons = ["0 23 * * *"]
 
 [vars]
 SUPABASE_URL = "https://fhpwmafnbzmtjemldmcy.supabase.co"
-SUPABASE_ANON_KEY = "sb_publishable_zj4PdCDhK1i9F2a49Tlddg_D5hlPIg9"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocHdtYWZuYnptdGplbWxkbWN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxOTA5OTQsImV4cCI6MjA5Nzc2Njk5NH0.DUlD9QbME-ReQY7ujlA172sMObR1JRay7dJAqoPq4-U"

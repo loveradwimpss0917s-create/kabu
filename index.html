@@ -699,12 +699,13 @@ function addQsTag(){
   renderQsTags();
 }
 renderQsTags();
-// スキャナーをデフォルトタブとして表示
+// スキャナーをデフォルトタブとして表示 & データ取得開始
 (function(){
   var panels = document.querySelectorAll('.tab-panel');
   panels.forEach(function(p){ p.classList.remove('active'); });
   var sp = document.getElementById('tab-scanner');
   if(sp) sp.classList.add('active');
+  setTimeout(function(){ loadScanner(); }, 50);
 })();
 
 function showErr(msg){var el=document.getElementById('errmsg');el.className='errmsg';el.textContent='⚠ '+msg;el.style.display='block';}

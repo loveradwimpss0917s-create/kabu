@@ -2388,16 +2388,18 @@ function loadScanner(force) {
   if (_scanFilter) url += '&signal=' + encodeURIComponent(_scanFilter);
 
   var done = false;
+  var fetchAbort = new AbortController();
   var timer = setTimeout(function() {
     if (!done) {
       done = true;
+      fetchAbort.abort();
       _scannerLoaded = false;
       if (list) list.innerHTML = '<div class="scanner-empty">⏱ 接続タイムアウト<br>「今すぐスキャン」を押すか、ページをリロードしてください。</div>';
       if (meta) meta.textContent = 'タイムアウト';
     }
-  }, 10000);
+  }, 8000);
 
-  fetch(url).then(function(r) {
+  fetch(url, { signal: fetchAbort.signal }).then(function(r) {
     return r.json().then(function(d) { return { ok: r.ok, data: d }; });
   }).then(function(res) {
     if (done) return;
@@ -2431,7 +2433,7 @@ function loadScanner(force) {
     done = true;
     clearTimeout(timer);
     _scannerLoaded = false;
-    var errMsg = e.message || '不明なエラー';
+    var errMsg = e.name === 'AbortError' ? 'タイムアウト' : (e.message || '不明なエラー');
     if (list) list.innerHTML = '<div class="scanner-empty">⚠ データ取得エラー<br><span style="font-size:10px;color:var(--txt3)">' + errMsg + '</span></div>';
     if (meta) meta.textContent = 'エラー';
   });

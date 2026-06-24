@@ -433,15 +433,19 @@ async function handleScanner(request, env, url) {
     });
   }
 
+  const ac = new AbortController();
+  const acTimer = setTimeout(() => ac.abort(), 8000);
   try {
+    const anonHeaders = { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Accept': 'application/json' };
     // 最新スキャン日取得
     const dateRes = await fetch(`${supaUrl}/rest/v1/scan_results?select=scan_date&order=scan_date.desc&limit=1`, {
-      headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Accept': 'application/json' }
+      headers: anonHeaders, signal: ac.signal
     });
     const dateData = await dateRes.json();
     const latestDate = dateData?.[0]?.scan_date;
 
     if (!latestDate) {
+      clearTimeout(acTimer);
       return new Response(JSON.stringify({ results: [], date: null, message: 'スキャンデータなし' }), {
         status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
       });
@@ -450,14 +454,14 @@ async function handleScanner(request, env, url) {
     let q = `${supaUrl}/rest/v1/scan_results?scan_date=eq.${latestDate}&order=score.desc&limit=${limit}`;
     if (signal) q += `&signal=eq.${encodeURIComponent(signal)}`;
 
-    const res = await fetch(q, {
-      headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Accept': 'application/json' }
-    });
+    const res = await fetch(q, { headers: anonHeaders, signal: ac.signal });
     const data = await res.json();
+    clearTimeout(acTimer);
     return new Response(JSON.stringify({ results: Array.isArray(data) ? data : [], date: latestDate }), {
       status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
     });
   } catch (e) {
+    clearTimeout(acTimer);
     return new Response(JSON.stringify({ error: e.message, results: [] }), {
       status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
     });

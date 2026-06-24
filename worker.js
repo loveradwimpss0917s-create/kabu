@@ -511,7 +511,15 @@ export default {
       return handleScanTrigger(request, env);
     }
 
-    return env.ASSETS.fetch(request);
+    // index.html はキャッシュさせない
+    const assetRes = await env.ASSETS.fetch(request);
+    if (url.pathname === '/' || url.pathname === '/index.html') {
+      const headers = new Headers(assetRes.headers);
+      headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      headers.set('Pragma', 'no-cache');
+      return new Response(assetRes.body, { status: assetRes.status, headers });
+    }
+    return assetRes;
   },
 
   async scheduled(event, env, ctx) {

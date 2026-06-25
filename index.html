@@ -339,6 +339,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .scanner-loading{text-align:center;padding:40px 20px;color:var(--txt2);font-size:12px}
 .si-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 .si-tag{font-size:8px;background:rgba(245,181,53,.12);color:var(--gold);border-radius:4px;padding:1px 5px;border:1px solid rgba(245,181,53,.25)}
+.si-star-btn{width:30px;height:30px;flex-shrink:0;background:none;border:1px solid rgba(255,255,255,.15);border-radius:50%;color:rgba(255,255,255,.4);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;padding:0}
+.si-star-btn.added{color:var(--gold);border-color:var(--gold);background:rgba(245,181,53,.15)}
 
 /* ── TAB PANELS ── */
 .tab-panel{display:none}
@@ -2472,7 +2474,15 @@ function renderScannerList() {
     if (r.macd_gc) tags.push('MACD-GC');
     if (r.volume_ratio >= 2) tags.push('出来高急増');
 
-    html += '<div class="scanner-item" onclick="openScannerStock(\'' + r.code + '\',\'' + (r.name||'').replace(/'/g,"\\'") + '\')">';
+    var wlData = wlLoad();
+    var inWatchlist = Object.values(wlData.folders||{}).some(function(arr){
+      return arr.some(function(s){ return s.code === r.code; });
+    });
+    var starCls = inWatchlist ? ' added' : '';
+    var starTxt = inWatchlist ? '★' : '☆';
+    var safeCode = r.code.replace(/'/g,"\\'");
+    var safeName = (r.name||'').replace(/'/g,"\\'");
+    html += '<div class="scanner-item" onclick="openScannerStock(\'' + safeCode + '\',\'' + safeName + '\')">';
     html += '<div class="si-rank' + rankCls + '">' + rank + '</div>';
     html += '<div class="si-info"><div class="si-code">' + r.code + '</div><div class="si-name">' + (r.name||r.code) + '</div>';
     if (tags.length > 0) html += '<div class="si-badges">' + tags.map(function(t){ return '<span class="si-tag">'+t+'</span>'; }).join('') + '</div>';
@@ -2481,6 +2491,7 @@ function renderScannerList() {
     html += '<div class="signal-badge si-signal ' + sigInfo.cls + '">' + sigInfo.short + '</div>';
     html += '<div class="si-price-wrap"><div class="si-price-num">¥' + priceTxt + '</div><div class="si-chg ' + chgCls + '">' + chgSign + chgAbs.toFixed(2) + '%</div></div>';
     html += '<div class="si-vol-wrap"><div class="si-vol-num">' + volTxt + '</div><div class="si-vol-lbl">出来高</div></div>';
+    html += '<button class="si-star-btn' + starCls + '" data-code="' + r.code + '" onclick="addScannerStockToWatchlist(\'' + safeCode + '\',\'' + safeName + '\',event)">' + starTxt + '</button>';
     html += '</div>';
   });
   list.innerHTML = html;
@@ -2499,9 +2510,46 @@ function setScanFilter(filter, btn) {
 
 function openScannerStock(code, name) {
   switchTab('overview');
-  var inp = document.getElementById('stockCode');
+  var inp = document.getElementById('sinput');
   if (inp) inp.value = code;
   analyze();
+}
+
+function addScannerStockToWatchlist(code, name, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  var data = wlLoad();
+  if (!data.folders || Object.keys(data.folders).length === 0) {
+    data.folders = {'お気に入り': [], '監視中': []};
+    wlSave(data);
+  }
+  var folders = Object.keys(data.folders);
+  var alreadyIn = null;
+  folders.forEach(function(f) {
+    if ((data.folders[f]||[]).some(function(s){ return s.code === code; })) alreadyIn = f;
+  });
+  if (alreadyIn) {
+    showToastMsg('「'+code+'」は「'+alreadyIn+'」に登録済みです');
+    return;
+  }
+  var targetFolder = folders[0];
+  data.folders[targetFolder].push({code:code, name:name||'', price:null, chg:null, sig:''});
+  wlSave(data);
+  showToastMsg('「'+name||code+'」を「'+targetFolder+'」に追加しました ✓');
+  // スターボタンをアクティブに
+  document.querySelectorAll('.si-star-btn[data-code="'+code+'"]').forEach(function(btn){
+    btn.classList.add('added');
+    btn.textContent = '★';
+  });
+}
+
+function showToastMsg(msg) {
+  var el = document.getElementById('errmsg');
+  if (!el) return;
+  var prev = el.className;
+  el.className = 'errmsg ok';
+  el.textContent = '✓ ' + msg;
+  el.style.display = 'block';
+  setTimeout(function(){ el.style.display='none'; el.className=prev||'errmsg'; }, 3000);
 }
 
 function triggerScan() {

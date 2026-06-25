@@ -213,8 +213,9 @@ function calcTradeScore(opens, highs, lows, closes, volumes) {
   // ③ RSI
   const rsiArr = calcRSI(closes, 14);
   const rsi = rsiArr[last] || 50;
-  if (rsi >= 50 && rsi <= 70) score += 10;
-  else if (rsi >= 80) score -= 10;
+  if (rsi >= 50 && rsi <= 65) score += 10;
+  else if (rsi > 65 && rsi <= 70) score += 3;
+  else if (rsi > 70) score -= 10;
   else if (rsi < 30) score += 5;
 
   // ④ MACD
@@ -234,9 +235,8 @@ function calcTradeScore(opens, highs, lows, closes, volumes) {
   const atrArr = calcATR(highs, lows, closes, 14);
   const atr = atrArr[last] || 0;
   const atrPct = cur > 0 ? (atr / cur) * 100 : 0;
-  if (atrPct < 2) score += 10;
-  else if (atrPct < 3) score += 5;
-  else if (atrPct >= 5) score -= 10;
+  if (atrPct >= 5) score -= 10;
+  else if (atrPct >= 3) score -= 5;
 
   // ⑥ ギャップ
   const prevClose = closes[last - 1] || cur;
@@ -249,9 +249,8 @@ function calcTradeScore(opens, highs, lows, closes, volumes) {
   const h52 = highs.slice(Math.max(0, last - 252), last + 1);
   const max52w = h52.length > 0 ? Math.max(...h52) : cur;
   const pct52w = max52w > 0 ? (cur / max52w) * 100 : 50;
-  if (pct52w >= 99.5) score += 20;
-  else if (pct52w >= 97) score += 10;
-  else if (pct52w >= 90) score += 5;
+  if (pct52w >= 99.5) score += 10;
+  else if (pct52w >= 97) score += 5;
 
   score = Math.max(0, Math.min(100, score));
 

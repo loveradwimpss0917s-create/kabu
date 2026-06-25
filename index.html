@@ -814,9 +814,9 @@ function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
   // ③ RSI
   var rsiArr=calcRSI(closes,14);
   var rsi=rsiArr[last]||50;
-  if(rsi>=50&&rsi<=70)       add('RSI',+10,'RSI='+rsi.toFixed(1)+' 理想的な強気域(50-70)','📊');
-  else if(rsi>70&&rsi<80)    add('RSI',+3,'RSI='+rsi.toFixed(1)+' 強気過熱気味','📊');
-  else if(rsi>=80)            add('RSI',-10,'RSI='+rsi.toFixed(1)+' 買われすぎ — 反落注意','📊');
+  if(rsi>=50&&rsi<=65)       add('RSI',+10,'RSI='+rsi.toFixed(1)+' 理想的な強気域(50-65)','📊');
+  else if(rsi>65&&rsi<=70)   add('RSI',+3,'RSI='+rsi.toFixed(1)+' やや過熱気味','📊');
+  else if(rsi>70)             add('RSI',-10,'RSI='+rsi.toFixed(1)+' 買われすぎ — 反落注意','📊');
   else if(rsi<30)             add('RSI',+5,'RSI='+rsi.toFixed(1)+' 売られすぎ — 反発期待','📊');
   else if(rsi>=30&&rsi<50)   add('RSI',-3,'RSI='+rsi.toFixed(1)+' 弱気域','📊');
 
@@ -834,10 +834,9 @@ function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
   // ⑤ ATRボラティリティ
   var atrVal=calcATR(highs,lows,closes,14);
   var atrPct=cur>0?atrVal/cur*100:2;
-  if(atrPct<2)        add('ATRボラ',+10,'ATR='+atrPct.toFixed(2)+'% 適度 — 安定したトレード環境','⚡');
-  else if(atrPct<3)   add('ATRボラ',+5,'ATR='+atrPct.toFixed(2)+'% やや高め','⚡');
-  else if(atrPct<5)   add('ATRボラ',0,'ATR='+atrPct.toFixed(2)+'% 高い','⚡');
-  else                add('ATRボラ',-10,'ATR='+atrPct.toFixed(2)+'% 過熱 — リスク大','⚡');
+  if(atrPct>=5)       add('ATRボラ',-10,'ATR='+atrPct.toFixed(2)+'% 過熱 — リスク大','⚡');
+  else if(atrPct>=3)  add('ATRボラ',-5,'ATR='+atrPct.toFixed(2)+'% やや高め — 注意','⚡');
+  else                add('ATRボラ',0,'ATR='+atrPct.toFixed(2)+'% 安定範囲','⚡');
 
   // ⑥ ギャップ率（始値 vs 前日終値）
   if(opens&&opens[last]&&last>=1&&closes[last-1]>0){
@@ -852,9 +851,8 @@ function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
   // ⑦ 年初来高値（52週高値）
   var nBars=Math.min(252,highs.length);
   var high52=Math.max.apply(null,highs.slice(-nBars));
-  if(cur>=high52*0.995)        add('52W高値',+20,'52週高値更新中！ 強モメンタム','🏆');
-  else if(cur>=high52*0.97)    add('52W高値',+10,'52週高値の3%圏内 ブレイク候補','🏆');
-  else if(cur>=high52*0.9)     add('52W高値',+5,'52週高値の10%圏内','🏆');
+  if(cur>=high52*0.995)        add('52W高値',+10,'52週高値更新中！ 強モメンタム','🏆');
+  else if(cur>=high52*0.97)    add('52W高値',+5,'52週高値の3%圏内 ブレイク候補','🏆');
   else                         add('52W高値',0,'高値から'+((1-cur/high52)*100).toFixed(1)+'%下','🏆');
 
   // ⑧ 材料・決算・アナリスト
@@ -887,8 +885,8 @@ function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
   else if(score>=30){signal='SELL';signalClass='sell';signalIcon='📉';signalJa='売り';}
   else{signal='STRONG SELL';signalClass='strong-sell';signalIcon='⬇️';signalJa='強い売り';}
 
-  // vClass (既存コードとの互換性)
-  var vClass=score>=60?'buy':score>=40?'hold':'sell';
+  // vClass: signalClassと整合させる
+  var vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
 
   return{score,signal,signalClass,signalIcon,signalJa,details,vClass,rsi,hist,isGC,isDC,atrPct,e20,e50,e200};
 }
@@ -1280,7 +1278,7 @@ async function analyze(){
     show('pcard');
 
     // Long/Short prediction
-    renderLongShort(summaryData,score,vClass,atrPct,rsiVal,macdHist,stoch,bbPos);
+    renderLongShort(summaryData,score,signalClass,atrPct,rsiVal,macdHist,stoch,bbPos);
     show('lscard');
 
     // News
@@ -1405,7 +1403,7 @@ function switchTab(name){
 }
 
 // ── RENDER: LONG/SHORT ──────────────────────────
-function renderLongShort(summary,score,vClass,atrPct,rsiVal,macdHist,stoch,bbPos){
+function renderLongShort(summary,score,signalClass,atrPct,rsiVal,macdHist,stoch,bbPos){
   var finAdj=0, reasons=[], finReasons=[];
 
   if(summary){
@@ -1455,13 +1453,13 @@ function renderLongShort(summary,score,vClass,atrPct,rsiVal,macdHist,stoch,bbPos
 
   var lsScore=Math.max(0,Math.min(100,score+finAdj));
 
-  // ★テクニカル判定（vClass）と完全一致させる
+  // スキャナーシグナルと完全整合
   var lsClass,lsTxt;
-  if(vClass==='buy'){     lsClass='long';    lsTxt='🟢 ロング（買い）推奨';}
-  else if(vClass==='sell'){lsClass='short';   lsTxt='🔴 ショート（売り）推奨';}
-  else if(score>=55){      lsClass='long';    lsTxt='🟡 やや強気（慎重ロング）';}
-  else if(score<=45){      lsClass='short';   lsTxt='🟡 やや弱気（慎重ショート）';}
-  else{                    lsClass='neutral'; lsTxt='⚪ 中立（様子見）';}
+  if(signalClass==='strong-buy'){ lsClass='long';    lsTxt='🚀 強いロング（STRONG BUY）';}
+  else if(signalClass==='buy'){   lsClass='long';    lsTxt='🟢 ロング（買い）推奨';}
+  else if(signalClass==='sell'){  lsClass='short';   lsTxt='🔴 ショート（売り）推奨';}
+  else if(signalClass==='strong-sell'){ lsClass='short'; lsTxt='⬇️ 強いショート（STRONG SELL）';}
+  else{                           lsClass='neutral'; lsTxt='⚪ 中立（様子見）';}
 
   var finNote=finAdj!==0?'（財務補正: '+(finAdj>0?'+':'')+finAdj+'pt）':'';
 

@@ -357,20 +357,21 @@ async function scanStock(code, name, crumb, cookie) {
   }
 }
 
-async function runScanner(env) {
+async function runScanner(env, maxStocks) {
   const { crumb, cookie } = await getCrumb();
   if (!crumb) throw new Error('crumb取得失敗');
 
+  const stockList = maxStocks ? SCAN_STOCKS.slice(0, maxStocks) : SCAN_STOCKS;
   const results = [];
   const batchSize = 10;
   const scanStart = Date.now();
   const MAX_SCAN_MS = 24000;
-  for (let i = 0; i < SCAN_STOCKS.length; i += batchSize) {
+  for (let i = 0; i < stockList.length; i += batchSize) {
     if (Date.now() - scanStart > MAX_SCAN_MS) break;
-    const batch = SCAN_STOCKS.slice(i, i + batchSize);
+    const batch = stockList.slice(i, i + batchSize);
     const batchRes = await Promise.all(batch.map(([code, name]) => scanStock(code, name, crumb, cookie)));
     for (const r of batchRes) { if (r) results.push(r); }
-    if (i + batchSize < SCAN_STOCKS.length && Date.now() - scanStart < MAX_SCAN_MS - 500) {
+    if (i + batchSize < stockList.length && Date.now() - scanStart < MAX_SCAN_MS - 500) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
@@ -471,7 +472,7 @@ async function handleScanTrigger(request, env) {
     });
   }
   try {
-    const result = await runScanner(env);
+    const result = await runScanner(env, 45);
     return new Response(JSON.stringify({ ok: true, ...result }), {
       status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
     });

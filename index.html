@@ -104,6 +104,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .signal-badge.sell{background:rgba(255,61,90,.12);border:1px solid rgba(255,61,90,.4);color:#ff3d5a}
 .signal-badge.strong-sell{background:linear-gradient(135deg,#660020,#ff3d5a);color:#fff;box-shadow:0 4px 20px rgba(255,61,90,.4)}
 
+.market-badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;width:fit-content}
+.market-badge.bull{background:rgba(0,212,126,.15);border:1px solid rgba(0,212,126,.35);color:var(--green)}
+.market-badge.neutral{background:rgba(245,181,53,.12);border:1px solid rgba(245,181,53,.3);color:var(--gold)}
+.market-badge.bear{background:rgba(255,61,90,.12);border:1px solid rgba(255,61,90,.3);color:var(--red)}
+.market-badge.crash{background:rgba(255,61,90,.2);border:1px solid rgba(255,61,90,.5);color:var(--red)}
+.scanner-market{padding:5px 12px;border-radius:8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;display:none;margin-bottom:6px;width:fit-content}
+.scanner-market.bull{background:rgba(0,212,126,.1);border:1px solid rgba(0,212,126,.3);color:var(--green)}
+.scanner-market.neutral{background:rgba(245,181,53,.1);border:1px solid rgba(245,181,53,.25);color:var(--gold)}
+.scanner-market.bear{background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--red)}
+.scanner-market.crash{background:rgba(255,61,90,.18);border:1px solid rgba(255,61,90,.4);color:var(--red)}
 .v-name{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;letter-spacing:1px;color:var(--txt)}
 .v-sub{font-size:10px;color:var(--txt2);font-family:'JetBrains Mono',monospace;line-height:1.5}
 .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -498,6 +508,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
       </div>
       <div class="v-right">
         <div class="signal-badge neutral" id="signalBadge">-- --</div>
+        <div class="market-badge" id="marketBadge" style="display:none"></div>
         <div class="v-name" id="vtxt">---</div>
         <div class="v-sub" id="vsub">---</div>
       </div>
@@ -602,6 +613,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
       </button>
     </div>
     <div class="scanner-meta" id="scannerMeta">読み込み中...</div>
+    <div class="scanner-market" id="scannerMarket"></div>
     <div class="scanner-filters" id="scannerFilters">
       <button class="sf-btn active" data-filter="">ALL</button>
       <button class="sf-btn" data-filter="STRONG BUY">🚀 STRONG BUY</button>
@@ -939,6 +951,16 @@ async function fetchYahooNews(code, stockName){
   }
 }
 
+async function fetchMarketCondition(){
+  try{
+    var r=await fetch('/api/market-condition');
+    if(!r.ok)return{level:'NEUTRAL',adj:0,n225:null,dayChangePct:0};
+    return await r.json();
+  }catch(e){
+    return{level:'NEUTRAL',adj:0,n225:null,dayChangePct:0};
+  }
+}
+
 function processChartData(result, interval){
   var meta=result.meta||{};
   var timestamps=result.timestamp||[];
@@ -1008,13 +1030,13 @@ async function analyze(){
     var cur=closes[last],prev=closes[last-1];
     var chgPct=(cur-prev)/prev*100;
 
-    // 2. 財務・ニュース並行取得（分足以外）
-    var summaryData=null,newsData=[];
+    // 2. 財務・ニュース・地合い並行取得（分足以外）
+    var summaryData=null,newsData=[],mc={level:'NEUTRAL',adj:0,n225:null,dayChangePct:0};
     var isIntraday=['1m','5m','15m','30m','1h'].indexOf(interval)>=0; // 分足判定
     if(!isIntraday){
-      setLdg('財務・ニュース取得中...','');
-      var results=await Promise.all([fetchYahooQuoteSummary(code),fetchYahooNews(code,stockName)]);
-      summaryData=results[0]; newsData=results[1];
+      setLdg('財務・ニュース・地合い取得中...','');
+      var results=await Promise.all([fetchYahooQuoteSummary(code),fetchYahooNews(code,stockName),fetchMarketCondition()]);
+      summaryData=results[0]; newsData=results[1]; mc=results[2]||mc;
     }
 
     setLdg('テクニカル分析中...','');
@@ -1201,6 +1223,18 @@ async function analyze(){
     var vClass=ts.vClass;
     var signalClass=ts.signalClass;
 
+    // ── 地合いフィルター適用 ──
+    if(!isIntraday&&mc.adj!==0){
+      ts.details.push({name:'地合いフィルター',pts:mc.adj,d:'日経225 '+mc.level+(mc.n225?' ('+mc.n225.toLocaleString()+'pt)':'')+' — 地合い調整',icon:'🇯🇵'});
+      score=Math.max(0,Math.min(100,score+mc.adj));
+      if(score>=90){signalClass='strong-buy';ts.signal='STRONG BUY';ts.signalIcon='🚀';ts.signalJa='強い買い';}
+      else if(score>=75){signalClass='buy';ts.signal='BUY';ts.signalIcon='📈';ts.signalJa='買い';}
+      else if(score>=50){signalClass='neutral';ts.signal='NEUTRAL';ts.signalIcon='⚖️';ts.signalJa='中立';}
+      else if(score>=30){signalClass='sell';ts.signal='SELL';ts.signalIcon='📉';ts.signalJa='売り';}
+      else{signalClass='strong-sell';ts.signal='STRONG SELL';ts.signalIcon='⬇️';ts.signalJa='強い売り';}
+      vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
+    }
+
     // 通知チェック
     if(monitorCode===code&&lastSignal&&vClass!==lastSignal&&(vClass==='buy'||vClass==='sell')){
       sendNotification(code,vClass,score,cur);
@@ -1252,6 +1286,18 @@ async function analyze(){
     document.getElementById('vtxt').textContent=ts.signalJa+' ('+stockName+')';
     var subTexts={'strong-buy':'全条件揃い — 最高のエントリー機会','buy':'上昇トレンド継続中 — 買いエントリー検討','neutral':'明確な方向性なし — 様子見推奨','sell':'下落トレンド — 売り/ショート検討','strong-sell':'全指標悪化 — ポジション回避'};
     document.getElementById('vsub').textContent=(subTexts[signalClass]||'')+'  |  スコア: '+score.toFixed(0)+'/100';
+    // 地合いバッジ
+    var mbEl=document.getElementById('marketBadge');
+    if(mbEl){
+      if(!isIntraday){
+        var mcLabels={'BULL':'📈 地合い: 強気','NEUTRAL':'🔁 地合い: 中立','BEAR':'📉 地合い: 弱気','CRASH':'💥 地合い: 暴落'};
+        var mcLabel=mcLabels[mc.level]||('地合い: '+mc.level);
+        if(mc.adj!==0)mcLabel+=' ('+(mc.adj>0?'+':'')+mc.adj+'pt)';
+        mbEl.textContent=mcLabel;
+        mbEl.className='market-badge '+mc.level.toLowerCase();
+        mbEl.style.display='inline-flex';
+      }else{mbEl.style.display='none';}
+    }
     var buyN=sigs.filter(function(s){return s.sig==='buy';}).length;
     var selN=sigs.filter(function(s){return s.sig==='sell';}).length;
     document.getElementById('vgrid').innerHTML=[
@@ -2424,6 +2470,17 @@ function loadScanner(force) {
     if (sbCount > 0) msgParts.push('🚀 STRONG BUY: ' + sbCount + '銘柄');
     if (meta) meta.textContent = msgParts.join('  |  ');
     renderScannerList();
+    // 地合いバッジ（非同期で取得）
+    fetchMarketCondition().then(function(mc){
+      var smEl=document.getElementById('scannerMarket');
+      if(!smEl)return;
+      var mcLabels={'BULL':'📈 地合い: 強気','NEUTRAL':'🔁 地合い: 中立','BEAR':'📉 地合い: 弱気','CRASH':'💥 地合い: 暴落'};
+      var mcLabel=mcLabels[mc.level]||('地合い: '+mc.level);
+      if(mc.adj!==0)mcLabel+='  全スコア'+(mc.adj>0?'+':'')+mc.adj+'pt補正済み';
+      smEl.textContent=mcLabel;
+      smEl.className='scanner-market '+mc.level.toLowerCase();
+      smEl.style.display='block';
+    });
   }).catch(function(e) {
     if (done) return;
     done = true;

@@ -37,6 +37,40 @@ async function getCrumb() {
   return { crumb: null, cookie: null };
 }
 
+async function getMarketCondition(crumb, cookie) {
+  const symbol = '%5EN225';
+  const params = new URLSearchParams({ interval: '1d', range: '1y' });
+  if (crumb) params.set('crumb', crumb);
+  const targetUrl = `${YF_BASE}/v8/finance/chart/${symbol}?${params}`;
+  const headers = { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com' };
+  if (cookie) headers['Cookie'] = cookie;
+  try {
+    const res = await fetch(targetUrl, { headers });
+    if (!res.ok) return { level: 'NEUTRAL', adj: 0, n225: null, dayChangePct: 0 };
+    const data = await res.json();
+    const chart = data?.chart?.result?.[0];
+    if (!chart) return { level: 'NEUTRAL', adj: 0, n225: null, dayChangePct: 0 };
+    const q = chart.indicators?.quote?.[0] || {};
+    const closes = (q.close || []).filter(c => c != null);
+    if (closes.length < 75) return { level: 'NEUTRAL', adj: 0, n225: null, dayChangePct: 0 };
+    const last = closes.length - 1;
+    const cur = closes[last];
+    const prev = closes[last - 1] || cur;
+    const dayChangePct = prev > 0 ? ((cur - prev) / prev) * 100 : 0;
+    const ma25 = closes.slice(-25).reduce((a, b) => a + b, 0) / 25;
+    const ma75 = closes.slice(-75).reduce((a, b) => a + b, 0) / 75;
+    let level, adj;
+    if (dayChangePct <= -3) { level = 'CRASH'; adj = -25; }
+    else if (cur > ma25 && ma25 > ma75) { level = 'BULL'; adj = 0; }
+    else if (cur < ma25 && ma25 < ma75) { level = 'BEAR'; adj = -15; }
+    else { level = 'NEUTRAL'; adj = -5; }
+    return { level, adj, n225: Math.round(cur), dayChangePct: Math.round(dayChangePct * 100) / 100 };
+  } catch (e) {
+    console.error('getMarketCondition error:', e.message);
+    return { level: 'NEUTRAL', adj: 0, n225: null, dayChangePct: 0 };
+  }
+}
+
 // ── PROXY HANDLERS ─────────────────────────────────────────────────────────
 
 async function handleYfin(request, url) {
@@ -360,6 +394,8 @@ async function runScanner(env, maxStocks) {
   const { crumb, cookie } = await getCrumb();
   if (!crumb) throw new Error('crumb取得失敗');
 
+  const mc = await getMarketCondition(crumb, cookie);
+
   const stockList = maxStocks ? SCAN_STOCKS.slice(0, maxStocks) : SCAN_STOCKS;
   const results = [];
   const batchSize = 10;
@@ -369,7 +405,18 @@ async function runScanner(env, maxStocks) {
     if (Date.now() - scanStart > MAX_SCAN_MS) break;
     const batch = stockList.slice(i, i + batchSize);
     const batchRes = await Promise.all(batch.map(([code, name]) => scanStock(code, name, crumb, cookie)));
-    for (const r of batchRes) { if (r) results.push(r); }
+    for (const r of batchRes) {
+      if (r) {
+        const adjScore = Math.max(0, Math.min(100, r.score + mc.adj));
+        let signal, signalClass;
+        if (adjScore >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; }
+        else if (adjScore >= 75) { signal = 'BUY'; signalClass = 'buy'; }
+        else if (adjScore >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; }
+        else if (adjScore >= 30) { signal = 'SELL'; signalClass = 'sell'; }
+        else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; }
+        results.push({ ...r, score: adjScore, signal, signal_class: signalClass });
+      }
+    }
     if (i + batchSize < stockList.length && Date.now() - scanStart < MAX_SCAN_MS - 500) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -414,7 +461,7 @@ async function runScanner(env, maxStocks) {
     throw new Error(`Supabase INSERT失敗: ${insertRes.status} ${errBody}`);
   }
 
-  return { scanned: results.length, saved: top50.length, date: today };
+  return { scanned: results.length, saved: top50.length, date: today, market_condition: mc };
 }
 
 // ── SCANNER API HANDLERS ───────────────────────────────────────────────────
@@ -471,7 +518,7 @@ async function handleScanTrigger(request, env) {
     });
   }
   try {
-    const result = await runScanner(env, 45);
+    const result = await runScanner(env, 44);
     return new Response(JSON.stringify({ ok: true, ...result }), {
       status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
     });
@@ -480,6 +527,15 @@ async function handleScanTrigger(request, env) {
       status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
     });
   }
+}
+
+async function handleMarketCondition(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders() });
+  const { crumb, cookie } = await getCrumb();
+  const mc = await getMarketCondition(crumb, cookie);
+  return new Response(JSON.stringify(mc), {
+    status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
+  });
 }
 
 // ── CORS ───────────────────────────────────────────────────────────────────
@@ -509,6 +565,9 @@ export default {
     }
     if (url.pathname === '/api/scan-trigger') {
       return handleScanTrigger(request, env);
+    }
+    if (url.pathname === '/api/market-condition') {
+      return handleMarketCondition(request, env);
     }
 
     // index.html はキャッシュさせない

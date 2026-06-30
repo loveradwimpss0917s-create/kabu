@@ -323,6 +323,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .tj-item-open{font-size:9px;color:var(--gold);font-family:'JetBrains Mono',monospace}
 .tj-empty{text-align:center;padding:30px;color:var(--txt3);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:2}
 
+/* FINANCIAL ALERT */
+.fa-alert{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px}
+.fa-title{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--gold);margin-bottom:8px}
+.fa-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid rgba(26,42,68,.4);font-size:11px;line-height:1.5}
+.fa-row:first-of-type{border-top:none}
+.fa-row-code{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--blue);flex:0 0 44px}
+.fa-row-msg{flex:1;color:var(--txt2)}
+.fa-row-msg .up{color:var(--green)}.fa-row-msg .dn{color:var(--red)}
+.fa-none{font-size:11px;color:var(--txt3);font-family:'JetBrains Mono',monospace;text-align:center;padding:6px}
+
 /* QS EDIT */
 .qs-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1}
 .qs-edit-btn{background:none;border:1px solid var(--bdr2);border-radius:4px;color:var(--txt3);font-size:10px;padding:3px 8px;cursor:pointer;white-space:nowrap;font-family:'JetBrains Mono',monospace}
@@ -722,10 +732,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 <div class="wl-panel" id="wlPanel">
   <div class="wl-header">
     <div class="wl-title">WATCHLIST</div>
+    <button class="wl-refresh-btn" onclick="checkFinancialAlerts()">📊 財務急変</button>
     <button class="wl-refresh-btn" onclick="refreshAllPrices()">⟳ 一括更新</button>
     <button class="wl-close" onclick="closeWatchlist()">✕ 閉じる</button>
   </div>
   <div class="wl-body">
+    <!-- 財務急変アラート -->
+    <div class="fa-alert" id="faAlert" style="display:none"></div>
     <!-- 新規フォルダ作成 -->
     <div class="wl-new-folder">
       <input type="text" id="wlNewFolder" placeholder="新しいフォルダ名..." autocomplete="off">
@@ -2670,6 +2683,69 @@ async function refreshAllPrices(){
   document.getElementById('wlFolders').style.opacity = '0.5';
   await Promise.allSettled(tasks);
   document.getElementById('wlFolders').style.opacity = '1';
+}
+
+// ── 財務急変アラート（#6） ──────────────────────────────────────────────
+var FA_KEY = 'stockedge_fin_snapshot';
+function faLoad(){ try{ return JSON.parse(localStorage.getItem(FA_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function faSave(o){ localStorage.setItem(FA_KEY, JSON.stringify(o)); }
+
+async function checkFinancialAlerts(){
+  var data = wlLoad();
+  var codes = [];
+  Object.keys(data.folders||{}).forEach(function(f){
+    (data.folders[f]||[]).forEach(function(s){ if(codes.indexOf(s.code)<0)codes.push(s.code); });
+  });
+  var el = document.getElementById('faAlert');
+  if(!el)return;
+  if(codes.length===0){ alert('ウォッチリストが空です'); return; }
+  el.style.display='block';
+  el.innerHTML='<div class="fa-title">📊 財務急変チェック</div><div class="fa-none">'+codes.length+'銘柄を確認中...</div>';
+
+  var snap = faLoad();
+  var alerts = [];
+  var recJa = {strong_buy:'強い買い',buy:'買い',hold:'中立',sell:'売り',strong_sell:'強い売り'};
+  var results = await Promise.allSettled(codes.map(function(code){ return fetchYahooQuoteSummary(code); }));
+
+  results.forEach(function(r,i){
+    var code = codes[i];
+    if(r.status!=='fulfilled'||!r.value)return;
+    var sd = r.value;
+    var fd = sd.financialData||{};
+    var cur = {
+      recKey: fd.recommendationKey||null,
+      target: (fd.targetMeanPrice&&fd.targetMeanPrice.raw)||null,
+      price: (fd.currentPrice&&fd.currentPrice.raw)||null
+    };
+    var prev = snap[code];
+    if(prev){
+      // アナリスト推奨の変化
+      if(prev.recKey&&cur.recKey&&prev.recKey!==cur.recKey){
+        var order={strong_sell:0,sell:1,hold:2,buy:3,strong_buy:4};
+        var up=(order[cur.recKey]||2)>(order[prev.recKey]||2);
+        alerts.push({code:code,msg:'アナリスト推奨 <span class="'+(up?'up':'dn')+'">'+(recJa[prev.recKey]||prev.recKey)+'→'+(recJa[cur.recKey]||cur.recKey)+'</span>'+(up?' 格上げ':' 格下げ')});
+      }
+      // 目標株価の変化（5%以上）
+      if(prev.target&&cur.target){
+        var diffPct=(cur.target-prev.target)/prev.target*100;
+        if(Math.abs(diffPct)>=5){
+          alerts.push({code:code,msg:'目標株価 <span class="'+(diffPct>=0?'up':'dn')+'">'+(diffPct>=0?'+':'')+diffPct.toFixed(1)+'%</span>（¥'+fmt(prev.target,0)+'→¥'+fmt(cur.target,0)+'）'});
+        }
+      }
+    }
+    snap[code]={recKey:cur.recKey,target:cur.target,price:cur.price,ts:Date.now()};
+  });
+  faSave(snap);
+
+  var html='<div class="fa-title">📊 財務急変チェック（前回比）</div>';
+  if(alerts.length===0){
+    html+='<div class="fa-none">'+(Object.keys(snap).length<=codes.length&&!alerts.length?'急変なし。基準値を記録しました。次回チェック時に変化を検出します。':'急変は検出されませんでした。')+'</div>';
+  }else{
+    html+=alerts.map(function(a){
+      return '<div class="fa-row"><div class="fa-row-code" onclick="qs(\''+a.code+'\')" style="cursor:pointer">'+a.code+'</div><div class="fa-row-msg">'+a.msg+'</div></div>';
+    }).join('');
+  }
+  el.innerHTML=html;
 }
 
 // 現在分析中の銘柄をウォッチリストに追加するショートカット

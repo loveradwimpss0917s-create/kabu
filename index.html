@@ -322,6 +322,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .tj-item-memo{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5}
 .tj-item-open{font-size:9px;color:var(--gold);font-family:'JetBrains Mono',monospace}
 .tj-empty{text-align:center;padding:30px;color:var(--txt3);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:2}
+.tj-dash{background:rgba(0,0,0,.2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px}
+.tj-dash-sec{margin-bottom:12px}
+.tj-dash-sec:last-child{margin-bottom:0}
+.tj-dash-ttl{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--blue);margin-bottom:8px}
+.tj-dash-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.tj-dash-cell{background:var(--bg2);border:1px solid var(--bdr);border-radius:7px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center}
+.tj-dash-lbl{font-size:10px;color:var(--txt2)}
+.tj-dash-num{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700}
+.tj-dash-row{display:flex;align-items:center;gap:8px;padding:5px 2px}
+.tj-dash-row-name{font-size:11px;color:var(--txt);flex:0 0 96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tj-dash-bar{flex:1;height:7px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;min-width:30px}
+.tj-dash-bar-fill{height:100%;border-radius:4px}
+.tj-dash-row-val{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;flex:0 0 92px;text-align:right}
+.tj-dash-empty{font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;text-align:center;padding:8px;line-height:1.6}
 
 /* FINANCIAL ALERT */
 .fa-alert{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px}
@@ -709,6 +723,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
   </div>
   <div class="tj-body">
     <div class="tj-stats" id="tjStats"></div>
+    <button class="sector-toggle-btn" id="tjDashBtn" onclick="toggleTradeDashboard()" style="margin-bottom:10px">📊 的中率ダッシュボードを表示</button>
+    <div class="tj-dash" id="tjDash" style="display:none"></div>
     <div class="tj-form">
       <div class="tj-form-row">
         <input class="tj-input" id="tjCode" placeholder="銘柄コード" inputmode="numeric" maxlength="4" style="flex:0 0 90px">
@@ -1114,6 +1130,7 @@ function calcSignal(closes,highs,lows,volumes){
 
 // ── MAIN ANALYZE ──────────────────────────────
 var chartInst=null;
+var _lastAnalysis=null; // 直近分析のシグナル（取引記録の紐付け用）
 
 async function analyze(){
   var code=document.getElementById('sinput').value.trim();
@@ -1362,6 +1379,9 @@ async function analyze(){
         }
       }
     }
+
+    // 直近分析のシグナルを保持（取引記録の紐付け用）
+    _lastAnalysis={code:code,signal:ts.signal,signalClass:signalClass,score:score};
 
     // 通知チェック
     if(monitorCode===code&&lastSignal&&vClass!==lastSignal&&(vClass==='buy'||vClass==='sell')){
@@ -2464,11 +2484,14 @@ function addTrade(){
   if(!/^\d{4}$/.test(code)){alert('4桁の銘柄コードを入力してください');return;}
   if(isNaN(entry)||entry<=0){alert('エントリー価格を入力してください');return;}
   if(isNaN(qty)||qty<1)qty=100;
+  // 直近分析と銘柄が一致すればシグナルを自動紐付け
+  var sig=null,sigScore=null;
+  if(_lastAnalysis&&_lastAnalysis.code===code){ sig=_lastAnalysis.signal; sigScore=_lastAnalysis.score; }
   var arr=tjLoad();
   arr.unshift({
     code:code, dir:dir, qty:qty, entry:entry,
     exit:isNaN(exitV)?null:exitV,
-    memo:memo, ts:Date.now()
+    memo:memo, ts:Date.now(), sig:sig, sigScore:sigScore
   });
   tjSave(arr);
   document.getElementById('tjCode').value='';
@@ -2501,6 +2524,7 @@ function renderTradeJournal(){
       '<div class="tj-stat"><div class="tj-stat-lbl">勝率</div><div class="tj-stat-val" style="color:'+(winRate>=50?'var(--green)':'var(--gold)')+'">'+winRate.toFixed(0)+'%</div></div>'+
       '<div class="tj-stat"><div class="tj-stat-lbl">取引数</div><div class="tj-stat-val">'+closed.length+'/'+arr.length+'</div></div>';
   }
+  if(_tjDashOpen)renderTradeDashboard();
   if(arr.length===0){
     listEl.innerHTML='<div class="tj-empty">📓 取引履歴がありません<br><br>上のフォームから取引を記録すると<br>勝率・損益が自動集計されます。</div>';
     return;
@@ -2526,6 +2550,96 @@ function renderTradeJournal(){
       (t.memo?'<div class="tj-item-memo">📝 '+t.memo.replace(/</g,'&lt;')+'</div>':'')+
       '</div>';
   }).join('');
+}
+
+var _tjDashOpen=false;
+function toggleTradeDashboard(){
+  _tjDashOpen=!_tjDashOpen;
+  var p=document.getElementById('tjDash');
+  var b=document.getElementById('tjDashBtn');
+  if(_tjDashOpen){ renderTradeDashboard(); if(p)p.style.display='block'; if(b)b.textContent='📊 的中率ダッシュボードを隠す'; if(b)b.classList.add('active'); }
+  else{ if(p)p.style.display='none'; if(b)b.textContent='📊 的中率ダッシュボードを表示'; if(b)b.classList.remove('active'); }
+}
+
+function renderTradeDashboard(){
+  var p=document.getElementById('tjDash');
+  if(!p)return;
+  var arr=tjLoad();
+  var closed=arr.filter(function(t){return t.exit!=null&&!isNaN(t.exit);});
+  if(closed.length===0){
+    p.innerHTML='<div class="tj-dash-empty">決済済みの取引がありません。<br>決済価格を入力した取引が集計対象です。</div>';
+    return;
+  }
+  // 損益と勝敗
+  var grossWin=0,grossLoss=0,wins=0,losses=0,sumRet=0;
+  closed.forEach(function(t){
+    var pl=tjPL(t);
+    var ret=t.entry>0?((t.exit-t.entry)/t.entry*100)*(t.dir==='short'?-1:1):0;
+    sumRet+=ret;
+    if(pl>0){grossWin+=pl;wins++;}else{grossLoss+=Math.abs(pl);losses++;}
+  });
+  var winRate=wins/closed.length*100;
+  var pf=grossLoss>0?(grossWin/grossLoss):(grossWin>0?Infinity:0);
+  var avgWin=wins>0?grossWin/wins:0;
+  var avgLoss=losses>0?grossLoss/losses:0;
+  var avgRet=sumRet/closed.length;
+  var netPL=grossWin-grossLoss;
+
+  function cell(lbl,val,color){return '<div class="tj-dash-cell"><div class="tj-dash-lbl">'+lbl+'</div><div class="tj-dash-num"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div></div>';}
+
+  var html='<div class="tj-dash-sec"><div class="tj-dash-ttl">■ 損益サマリー</div><div class="tj-dash-grid">'+
+    cell('純損益', (netPL>=0?'+':'')+'¥'+fmt(netPL,0), netPL>=0?'var(--green)':'var(--red)')+
+    cell('勝率', winRate.toFixed(0)+'% ('+wins+'/'+closed.length+')', winRate>=50?'var(--green)':'var(--gold)')+
+    cell('PF', pf===Infinity?'∞':pf.toFixed(2), pf>=1.5?'var(--green)':pf>=1?'var(--gold)':'var(--red)')+
+    cell('平均リターン', (avgRet>=0?'+':'')+avgRet.toFixed(2)+'%', avgRet>=0?'var(--green)':'var(--red)')+
+    cell('平均利益', '¥'+fmt(avgWin,0), 'var(--green)')+
+    cell('平均損失', '¥'+fmt(avgLoss,0), 'var(--red)')+
+    '</div></div>';
+
+  // 方向別
+  function dirStats(d){
+    var sub=closed.filter(function(t){return t.dir===d;});
+    if(sub.length===0)return null;
+    var w=sub.filter(function(t){return tjPL(t)>0;}).length;
+    var pl=sub.reduce(function(a,t){return a+tjPL(t);},0);
+    return {n:sub.length,wr:w/sub.length*100,pl:pl};
+  }
+  var dl=dirStats('long'),ds=dirStats('short');
+  var dirHtml='';
+  [['ロング',dl],['ショート',ds]].forEach(function(x){
+    if(!x[1])return;
+    var s=x[1];
+    var col=s.wr>=50?'var(--green)':'var(--gold)';
+    dirHtml+='<div class="tj-dash-row"><div class="tj-dash-row-name">'+x[0]+'</div>'+
+      '<div class="tj-dash-bar"><div class="tj-dash-bar-fill" style="width:'+s.wr+'%;background:'+col+'"></div></div>'+
+      '<div class="tj-dash-row-val" style="color:'+col+'">'+s.wr.toFixed(0)+'% '+(s.pl>=0?'+':'')+'¥'+fmt(s.pl,0)+'</div></div>';
+  });
+  if(dirHtml)html+='<div class="tj-dash-sec"><div class="tj-dash-ttl">■ 方向別的中率</div>'+dirHtml+'</div>';
+
+  // シグナル別的中率（シグナル紐付け済みのみ）
+  var withSig=closed.filter(function(t){return t.sig;});
+  var sigHtml='';
+  if(withSig.length>0){
+    var sigGroups={};
+    withSig.forEach(function(t){ if(!sigGroups[t.sig])sigGroups[t.sig]=[]; sigGroups[t.sig].push(t); });
+    var sigOrder=['STRONG BUY','BUY','NEUTRAL','SELL','STRONG SELL'];
+    sigOrder.forEach(function(sg){
+      var sub=sigGroups[sg];
+      if(!sub||sub.length===0)return;
+      var w=sub.filter(function(t){return tjPL(t)>0;}).length;
+      var wr=w/sub.length*100;
+      var pl=sub.reduce(function(a,t){return a+tjPL(t);},0);
+      var col=wr>=50?'var(--green)':'var(--gold)';
+      sigHtml+='<div class="tj-dash-row"><div class="tj-dash-row-name">'+sg+'</div>'+
+        '<div class="tj-dash-bar"><div class="tj-dash-bar-fill" style="width:'+wr+'%;background:'+col+'"></div></div>'+
+        '<div class="tj-dash-row-val" style="color:'+col+'">'+wr.toFixed(0)+'% ('+w+'/'+sub.length+')</div></div>';
+    });
+  }
+  html+='<div class="tj-dash-sec"><div class="tj-dash-ttl">■ シグナル別的中率</div>'+
+    (sigHtml||'<div class="tj-dash-empty">分析画面で表示中の銘柄を記録するとシグナルが自動紐付けされ、ここに的中率が集計されます。</div>')+
+    '</div>';
+
+  p.innerHTML=html;
 }
 
 function addFolder(){

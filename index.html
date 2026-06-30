@@ -290,6 +290,39 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .wl-refresh-btn{background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:6px 12px;color:var(--txt2);font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace}
 .wl-empty{text-align:center;padding:30px;color:var(--txt3);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:2}
 
+/* TRADE JOURNAL */
+.tj-fab{position:fixed;bottom:80px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#664400,#cc8800);border:1px solid var(--gold);color:#fff;font-size:22px;cursor:pointer;box-shadow:0 4px 24px rgba(245,181,53,.3);z-index:50;display:flex;align-items:center;justify-content:center}
+.tj-panel{position:fixed;inset:0;background:rgba(4,6,15,.97);z-index:150;display:none;flex-direction:column}
+.tj-panel.show{display:flex}
+.tj-header{display:flex;align-items:center;padding:16px;border-bottom:1px solid var(--bdr);gap:10px;flex-shrink:0}
+.tj-title{font-family:'Orbitron',monospace;font-size:14px;letter-spacing:3px;color:var(--gold);flex:1}
+.tj-close{background:none;border:1px solid var(--bdr);border-radius:6px;color:var(--txt2);padding:6px 14px;cursor:pointer;font-size:12px}
+.tj-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px}
+.tj-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.tj-stat{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center}
+.tj-stat-lbl{font-size:9px;color:var(--txt2);letter-spacing:1px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;margin-bottom:4px}
+.tj-stat-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
+.tj-form{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:12px;margin-bottom:14px;display:flex;flex-direction:column;gap:8px}
+.tj-form-row{display:flex;gap:8px}
+.tj-input,.tj-select{flex:1;min-width:0;background:var(--bg);border:1px solid var(--bdr2);border-radius:7px;padding:9px 10px;color:var(--txt);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;-webkit-appearance:none}
+.tj-input::placeholder{color:var(--txt3)}
+.tj-add-btn{background:linear-gradient(135deg,#664400,#cc8800);border:1px solid var(--gold);border-radius:7px;padding:11px;color:#fff;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1px;cursor:pointer}
+.tj-list{display:flex;flex-direction:column;gap:8px}
+.tj-item{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:11px 12px}
+.tj-item-top{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.tj-item-code{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--blue)}
+.tj-item-dir{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px}
+.tj-item-dir.long{background:rgba(0,212,126,.12);color:var(--green)}
+.tj-item-dir.short{background:rgba(255,61,90,.12);color:var(--red)}
+.tj-item-date{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt3);margin-left:auto}
+.tj-item-del{color:var(--txt3);font-size:14px;padding:2px 6px;cursor:pointer}
+.tj-item-mid{display:flex;flex-wrap:wrap;gap:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt2)}
+.tj-item-pl{font-weight:700;margin-left:auto}
+.tj-item-pl.up{color:var(--green)}.tj-item-pl.dn{color:var(--red)}
+.tj-item-memo{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5}
+.tj-item-open{font-size:9px;color:var(--gold);font-family:'JetBrains Mono',monospace}
+.tj-empty{text-align:center;padding:30px;color:var(--txt3);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:2}
+
 /* QS EDIT */
 .qs-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1}
 .qs-edit-btn{background:none;border:1px solid var(--bdr2);border-radius:4px;color:var(--txt3);font-size:10px;padding:3px 8px;cursor:pointer;white-space:nowrap;font-family:'JetBrains Mono',monospace}
@@ -654,6 +687,36 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 
 <!-- WATCHLIST FAB -->
 <button class="wl-fab" onclick="openWatchlist()" title="ウォッチリスト">☆</button>
+
+<!-- TRADE JOURNAL FAB -->
+<button class="tj-fab" onclick="openTradeJournal()" title="取引履歴">📓</button>
+
+<!-- TRADE JOURNAL PANEL -->
+<div class="tj-panel" id="tjPanel">
+  <div class="tj-header">
+    <div class="tj-title">TRADE JOURNAL</div>
+    <button class="tj-close" onclick="closeTradeJournal()">✕ 閉じる</button>
+  </div>
+  <div class="tj-body">
+    <div class="tj-stats" id="tjStats"></div>
+    <div class="tj-form">
+      <div class="tj-form-row">
+        <input class="tj-input" id="tjCode" placeholder="銘柄コード" inputmode="numeric" maxlength="4" style="flex:0 0 90px">
+        <select class="tj-select" id="tjDir"><option value="long">ロング(買い)</option><option value="short">ショート(売り)</option></select>
+        <input class="tj-input" id="tjQty" placeholder="株数" inputmode="numeric" value="100" style="flex:0 0 80px">
+      </div>
+      <div class="tj-form-row">
+        <input class="tj-input" id="tjEntry" placeholder="エントリー価格 (¥)" inputmode="decimal">
+        <input class="tj-input" id="tjExit" placeholder="決済価格 (¥) 任意" inputmode="decimal">
+      </div>
+      <div class="tj-form-row">
+        <input class="tj-input" id="tjMemo" placeholder="メモ（根拠・反省など）任意">
+      </div>
+      <button class="tj-add-btn" onclick="addTrade()">＋ 取引を記録</button>
+    </div>
+    <div class="tj-list" id="tjList"></div>
+  </div>
+</div>
 
 <!-- WATCHLIST PANEL -->
 <div class="wl-panel" id="wlPanel">
@@ -2352,6 +2415,105 @@ function openWatchlist(){
   document.getElementById('wlPanel').classList.add('show');
 }
 function closeWatchlist(){ document.getElementById('wlPanel').classList.remove('show'); }
+
+// ── TRADE JOURNAL（取引履歴・localStorage） ──────────────────────────────
+var TJ_KEY = 'stockedge_trades';
+function tjLoad(){
+  try{ var v=JSON.parse(localStorage.getItem(TJ_KEY)||'null'); return Array.isArray(v)?v:[]; }
+  catch(e){ return []; }
+}
+function tjSave(arr){ localStorage.setItem(TJ_KEY, JSON.stringify(arr)); }
+
+function openTradeJournal(){
+  renderTradeJournal();
+  // エントリー価格に分析中の現在値を初期補完
+  var inp=document.getElementById('sinput');
+  var codeEl=document.getElementById('tjCode');
+  if(inp&&codeEl&&inp.value.trim()&&!codeEl.value)codeEl.value=inp.value.trim();
+  document.getElementById('tjPanel').classList.add('show');
+}
+function closeTradeJournal(){ document.getElementById('tjPanel').classList.remove('show'); }
+
+function tjPL(t){
+  // 損益（円）: 決済済みのみ。ショートは反転
+  if(t.exit==null||isNaN(t.exit))return null;
+  var diff=(t.exit-t.entry)*(t.dir==='short'?-1:1);
+  return diff*(t.qty||0);
+}
+
+function addTrade(){
+  var code=(document.getElementById('tjCode').value||'').trim();
+  var dir=document.getElementById('tjDir').value;
+  var qty=parseFloat(document.getElementById('tjQty').value);
+  var entry=parseFloat(document.getElementById('tjEntry').value);
+  var exitV=parseFloat(document.getElementById('tjExit').value);
+  var memo=(document.getElementById('tjMemo').value||'').trim();
+  if(!/^\d{4}$/.test(code)){alert('4桁の銘柄コードを入力してください');return;}
+  if(isNaN(entry)||entry<=0){alert('エントリー価格を入力してください');return;}
+  if(isNaN(qty)||qty<1)qty=100;
+  var arr=tjLoad();
+  arr.unshift({
+    code:code, dir:dir, qty:qty, entry:entry,
+    exit:isNaN(exitV)?null:exitV,
+    memo:memo, ts:Date.now()
+  });
+  tjSave(arr);
+  document.getElementById('tjCode').value='';
+  document.getElementById('tjEntry').value='';
+  document.getElementById('tjExit').value='';
+  document.getElementById('tjMemo').value='';
+  renderTradeJournal();
+}
+
+function deleteTrade(ts){
+  if(!confirm('この取引記録を削除しますか？'))return;
+  tjSave(tjLoad().filter(function(t){return t.ts!==ts;}));
+  renderTradeJournal();
+}
+
+function renderTradeJournal(){
+  var arr=tjLoad();
+  var statsEl=document.getElementById('tjStats');
+  var listEl=document.getElementById('tjList');
+  if(!listEl)return;
+  // 統計（決済済みのみ対象）
+  var closed=arr.filter(function(t){return t.exit!=null&&!isNaN(t.exit);});
+  var totalPL=0,wins=0;
+  closed.forEach(function(t){var pl=tjPL(t);totalPL+=pl;if(pl>0)wins++;});
+  var winRate=closed.length>0?(wins/closed.length*100):0;
+  if(statsEl){
+    var plColor=totalPL>=0?'var(--green)':'var(--red)';
+    statsEl.innerHTML=
+      '<div class="tj-stat"><div class="tj-stat-lbl">実現損益</div><div class="tj-stat-val" style="color:'+plColor+'">'+(totalPL>=0?'+':'')+'¥'+fmt(totalPL,0)+'</div></div>'+
+      '<div class="tj-stat"><div class="tj-stat-lbl">勝率</div><div class="tj-stat-val" style="color:'+(winRate>=50?'var(--green)':'var(--gold)')+'">'+winRate.toFixed(0)+'%</div></div>'+
+      '<div class="tj-stat"><div class="tj-stat-lbl">取引数</div><div class="tj-stat-val">'+closed.length+'/'+arr.length+'</div></div>';
+  }
+  if(arr.length===0){
+    listEl.innerHTML='<div class="tj-empty">📓 取引履歴がありません<br><br>上のフォームから取引を記録すると<br>勝率・損益が自動集計されます。</div>';
+    return;
+  }
+  listEl.innerHTML=arr.map(function(t){
+    var d=new Date(t.ts);
+    var dateStr=(d.getFullYear()%100)+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');
+    var pl=tjPL(t);
+    var dirTxt=t.dir==='short'?'ショート':'ロング';
+    var sec=SECTOR_MAP[t.code]?'<span style="color:var(--txt3)"> ['+SECTOR_MAP[t.code]+']</span>':'';
+    var mid='<span>IN ¥'+fmt(t.entry,1)+'</span>'+
+      (t.exit!=null?'<span>OUT ¥'+fmt(t.exit,1)+'</span>':'<span class="tj-item-open">● 保有中</span>')+
+      '<span>'+fmt(t.qty,0)+'株</span>';
+    var plHtml=pl!=null?'<span class="tj-item-pl '+(pl>=0?'up':'dn')+'">'+(pl>=0?'+':'')+'¥'+fmt(pl,0)+'</span>':'';
+    return '<div class="tj-item">'+
+      '<div class="tj-item-top">'+
+        '<span class="tj-item-code" onclick="qs(\''+t.code+'\')" style="cursor:pointer">'+t.code+'</span>'+sec+
+        '<span class="tj-item-dir '+t.dir+'">'+dirTxt+'</span>'+
+        '<span class="tj-item-date">'+dateStr+'</span>'+
+        '<span class="tj-item-del" onclick="deleteTrade('+t.ts+')">🗑</span>'+
+      '</div>'+
+      '<div class="tj-item-mid">'+mid+plHtml+'</div>'+
+      (t.memo?'<div class="tj-item-memo">📝 '+t.memo.replace(/</g,'&lt;')+'</div>':'')+
+      '</div>';
+  }).join('');
+}
 
 function addFolder(){
   var name = document.getElementById('wlNewFolder').value.trim();

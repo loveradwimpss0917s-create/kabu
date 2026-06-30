@@ -509,6 +509,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
       <div class="v-right">
         <div class="signal-badge neutral" id="signalBadge">-- --</div>
         <div class="market-badge" id="marketBadge" style="display:none"></div>
+        <div class="market-badge" id="mtfBadge" style="display:none"></div>
         <div class="v-name" id="vtxt">---</div>
         <div class="v-sub" id="vsub">---</div>
       </div>
@@ -965,6 +966,17 @@ async function fetchMarketCondition(){
   }
 }
 
+// 別時間軸のシグナルを取得（MTF一致確認用）
+async function fetchTimeframeSignal(code,interval){
+  try{
+    var cr=await fetchYahooChart(code,interval);
+    var d=processChartData(cr,interval);
+    if(d.closes.length<60)return null;
+    var t=calcTradeScore(d.opens,d.highs,d.lows,d.closes,d.volumes,null,interval);
+    return{interval:interval,score:t.score,signalClass:t.signalClass,signal:t.signal,signalJa:t.signalJa};
+  }catch(e){return null;}
+}
+
 function processChartData(result, interval){
   var meta=result.meta||{};
   var timestamps=result.timestamp||[];
@@ -1034,13 +1046,19 @@ async function analyze(){
     var cur=closes[last],prev=closes[last-1];
     var chgPct=(cur-prev)/prev*100;
 
-    // 2. 財務・ニュース・地合い並行取得（分足以外）
-    var summaryData=null,newsData=[],mc={level:'NEUTRAL',adj:0,n225:null,dayChangePct:0};
+    // 2. 財務・ニュース・地合い・別時間軸 並行取得（分足以外）
+    var summaryData=null,newsData=[],mc={level:'NEUTRAL',adj:0,n225:null,dayChangePct:0},mtf=null;
     var isIntraday=['1m','5m','15m','30m','1h'].indexOf(interval)>=0; // 分足判定
+    var mtfInterval=interval==='1d'?'1wk':(interval==='1wk'?'1d':null); // MTF対象（日足⇄週足）
     if(!isIntraday){
       setLdg('財務・ニュース・地合い取得中...','');
-      var results=await Promise.all([fetchYahooQuoteSummary(code),fetchYahooNews(code,stockName),fetchMarketCondition()]);
-      summaryData=results[0]; newsData=results[1]; mc=results[2]||mc;
+      var results=await Promise.all([
+        fetchYahooQuoteSummary(code),
+        fetchYahooNews(code,stockName),
+        fetchMarketCondition(),
+        mtfInterval?fetchTimeframeSignal(code,mtfInterval):Promise.resolve(null)
+      ]);
+      summaryData=results[0]; newsData=results[1]; mc=results[2]||mc; mtf=results[3];
     }
 
     setLdg('テクニカル分析中...','');
@@ -1320,6 +1338,27 @@ async function analyze(){
         mbEl.className='market-badge '+mc.level.toLowerCase();
         mbEl.style.display='inline-flex';
       }else{mbEl.style.display='none';}
+    }
+    // MTF（複数時間軸）一致バッジ
+    var mtfEl=document.getElementById('mtfBadge');
+    if(mtfEl){
+      if(mtf&&mtfInterval){
+        var tfName={'1d':'日足','1wk':'週足'};
+        var baseName=tfName[interval]||interval;
+        var secName=tfName[mtfInterval]||mtfInterval;
+        var curBull=signalClass==='buy'||signalClass==='strong-buy';
+        var curBear=signalClass==='sell'||signalClass==='strong-sell';
+        var secBull=mtf.signalClass==='buy'||mtf.signalClass==='strong-buy';
+        var secBear=mtf.signalClass==='sell'||mtf.signalClass==='strong-sell';
+        var mtfTxt,mtfCls;
+        if(curBull&&secBull){mtfTxt='✅ '+baseName+'・'+secName+'ともに買い — 高信頼度';mtfCls='bull';}
+        else if(curBear&&secBear){mtfTxt='✅ '+baseName+'・'+secName+'ともに売り — 高信頼度';mtfCls='bear';}
+        else if((curBull&&secBear)||(curBear&&secBull)){mtfTxt='⚠ '+baseName+'と'+secName+'が逆方向 — 不一致（注意）';mtfCls='crash';}
+        else{mtfTxt='🔁 '+secName+'は'+mtf.signalJa+'（'+mtf.score.toFixed(0)+'pt）— 一部一致';mtfCls='neutral';}
+        mtfEl.textContent=mtfTxt;
+        mtfEl.className='market-badge '+mtfCls;
+        mtfEl.style.display='inline-flex';
+      }else{mtfEl.style.display='none';}
     }
     var buyN=sigs.filter(function(s){return s.sig==='buy';}).length;
     var selN=sigs.filter(function(s){return s.sig==='sell';}).length;

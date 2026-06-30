@@ -601,6 +601,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     <div class="ctitle">損益シミュレーター</div>
     <div id="simContent"></div>
   </div>
+  <div class="card" id="trailcard" style="display:none">
+    <div class="ctitle">トレール損切り計算機（ATR連動）</div>
+    <div id="trailContent"></div>
+  </div>
 </div>
 
 <!-- TAB: スキャナー -->
@@ -1235,6 +1239,22 @@ async function analyze(){
       vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
     }
 
+    // ── 決算3日前シグナル除外 ──
+    var daysToEarnings=null;
+    if(!isIntraday&&summaryData){
+      var calEx=summaryData.calendarEvents||{};
+      var earArrEx=calEx.earnings&&calEx.earnings.earningsDate;
+      var nextEarEx=earArrEx&&earArrEx[0]&&earArrEx[0].raw;
+      if(nextEarEx){
+        daysToEarnings=Math.ceil((nextEarEx-Date.now()/1000)/86400);
+        if(daysToEarnings>=0&&daysToEarnings<=3){
+          signalClass='neutral';ts.signal='NEUTRAL';ts.signalIcon='⏸️';ts.signalJa='決算前(様子見)';
+          vClass='hold';
+          ts.details.push({name:'決算リスク',pts:0,d:'決算まで'+daysToEarnings+'日 — シグナル除外（イベントリスク回避）','icon':'📅'});
+        }
+      }
+    }
+
     // 通知チェック
     if(monitorCode===code&&lastSignal&&vClass!==lastSignal&&(vClass==='buy'||vClass==='sell')){
       sendNotification(code,vClass,score,cur);
@@ -1285,7 +1305,10 @@ async function analyze(){
     signalBadge.className='signal-badge '+signalClass;
     document.getElementById('vtxt').textContent=ts.signalJa+' ('+stockName+')';
     var subTexts={'strong-buy':'全条件揃い — 最高のエントリー機会','buy':'上昇トレンド継続中 — 買いエントリー検討','neutral':'明確な方向性なし — 様子見推奨','sell':'下落トレンド — 売り/ショート検討','strong-sell':'全指標悪化 — ポジション回避'};
-    document.getElementById('vsub').textContent=(subTexts[signalClass]||'')+'  |  スコア: '+score.toFixed(0)+'/100';
+    var subTxt=(daysToEarnings!=null&&daysToEarnings>=0&&daysToEarnings<=3)
+      ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためシグナル除外'
+      :(subTexts[signalClass]||'');
+    document.getElementById('vsub').textContent=subTxt+'  |  スコア: '+score.toFixed(0)+'/100';
     // 地合いバッジ
     var mbEl=document.getElementById('marketBadge');
     if(mbEl){
@@ -1339,6 +1362,7 @@ async function analyze(){
       renderCalendar(summaryData);
     }
     renderSimulator(cur, atr, vClass);
+    renderTrailStop(cur, atr, vClass);
 
     // Indicators
     ['ic-rsi','ic-macd','ic-stoch','ic-bb','ic-ma','ic-vol','ic-ichimoku','ic-adx','ic-vwap','ic-obv','ic-fib'].forEach(function(id){show(id);});
@@ -1790,6 +1814,63 @@ function calcSimulator(){
     '</div>'+
     (rr>=2?'<div style="margin-top:8px;padding:8px;background:rgba(0,200,117,.08);border-radius:6px;font-size:10px;color:var(--green);font-family:JetBrains Mono,monospace">✅ RR比2以上 — 良好なリスク設定です</div>':'')+
     (rr>0&&rr<1?'<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ RR比1未満 — 損切りが近すぎるか目標が低すぎます</div>':'');
+}
+
+// ── RENDER: トレール損切り計算機 ─────────────────
+var _trailCur=0,_trailAtr=0,_trailVClass='';
+function renderTrailStop(cur,atr,vClass){
+  _trailCur=cur;_trailAtr=atr;_trailVClass=vClass;
+  var el=document.getElementById('trailContent');
+  if(!el)return;
+  var atrPct=cur>0?(atr/cur*100):0;
+  el.innerHTML=
+    '<div style="font-size:11px;color:var(--txt2);font-family:JetBrains Mono,monospace;line-height:1.6;margin-bottom:10px">'+
+    'ATR=¥'+fmt(atr,1)+' ('+atrPct.toFixed(2)+'%) を基準に、価格が有利に動くたび損切り価格を切り上げ／切り下げる動的損切りラインを計算します。</div>'+
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">現在価格 (¥)</div><input class="sim-input" id="trailPrice" type="number" value="'+fmt(cur,0)+'" step="1" inputmode="decimal"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">ATR倍率</div><select class="sim-input" id="trailMult"><option value="1.5">1.5x（タイト）</option><option value="2" selected>2.0x（標準）</option><option value="2.5">2.5x（ワイド）</option><option value="3">3.0x（超ワイド）</option></select></div>'+
+    '</div>'+
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">ポジション方向</div><select class="sim-input" id="trailDir"><option value="long"'+(vClass==='sell'?'':' selected')+'>ロング（買い）</option><option value="short"'+(vClass==='sell'?' selected':'')+'>ショート（売り）</option></select></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">最高値/最安値 (¥)<span style="color:var(--txt3)"> 任意</span></div><input class="sim-input" id="trailPeak" type="number" placeholder="未入力なら現在価格" step="1" inputmode="decimal"></div>'+
+    '</div>'+
+    '<button class="sim-btn" onclick="calcTrailStop()">▶ トレール損切りを計算</button>'+
+    '<div class="sim-result" id="trailResult"></div>';
+  show('trailcard');
+  setTimeout(calcTrailStop,150);
+}
+
+function calcTrailStop(){
+  var price=parseFloat(document.getElementById('trailPrice').value);
+  var mult=parseFloat(document.getElementById('trailMult').value);
+  var dir=document.getElementById('trailDir').value;
+  var peakInput=parseFloat(document.getElementById('trailPeak').value);
+  var el=document.getElementById('trailResult');
+  if(!el)return;
+  if(isNaN(price)||price<=0||isNaN(mult)){
+    el.className='sim-result show';
+    el.innerHTML='<div style="color:var(--red);font-size:11px;font-family:JetBrains Mono,monospace">入力値を確認してください</div>';
+    return;
+  }
+  var atrDist=_trailAtr*mult;
+  var isLong=dir==='long';
+  var peak=!isNaN(peakInput)&&peakInput>0?peakInput:price;
+  // ロング: 損切り = 最高値 - ATR×倍率 ／ ショート: 損切り = 最安値 + ATR×倍率
+  var stop=isLong?(peak-atrDist):(peak+atrDist);
+  var stopPctFromPeak=peak>0?Math.abs((stop-peak)/peak*100):0;
+  var stopPctFromCur=price>0?((stop-price)/price*100):0;
+  var locked=isLong?(stop>price?stop-price:null):(stop<price?price-stop:null); // 含み益が確保されているか
+  el.className='sim-result show';
+  el.innerHTML=
+    '<div class="sim-res-grid">'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">トレール損切り価格</div><div class="sim-res-val" style="color:var(--gold)">¥'+fmt(stop,1)+'</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">損切り幅 (ATR×'+mult+')</div><div class="sim-res-val">¥'+fmt(atrDist,1)+'</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">'+(isLong?'最高値':'最安値')+'からの距離</div><div class="sim-res-val">'+stopPctFromPeak.toFixed(2)+'%</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">現在価格からの距離</div><div class="sim-res-val" style="color:'+(stopPctFromCur>=0?'var(--green)':'var(--red)')+'">'+(stopPctFromCur>=0?'+':'')+stopPctFromCur.toFixed(2)+'%</div></div>'+
+    '</div>'+
+    (locked!=null
+      ?'<div style="margin-top:8px;padding:8px;background:rgba(0,200,117,.08);border-radius:6px;font-size:10px;color:var(--green);font-family:JetBrains Mono,monospace">✅ 損切りが建値より有利な水準 — 含み益¥'+fmt(locked,1)+'/株を確保した状態でトレール中</div>'
+      :'<div style="margin-top:8px;padding:8px;background:rgba(245,181,53,.08);border-radius:6px;font-size:10px;color:var(--gold);font-family:JetBrains Mono,monospace">💡 価格が'+(isLong?'上昇':'下落')+'して最高'+(isLong?'値':'安値')+'が更新されるたび、この計算を再実行して損切りを切り'+(isLong?'上':'下')+'げてください</div>');
 }
 
 // ── RENDER: CHART ──────────────────────────────

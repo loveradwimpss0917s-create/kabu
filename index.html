@@ -114,6 +114,18 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .scanner-market.neutral{background:rgba(245,181,53,.1);border:1px solid rgba(245,181,53,.25);color:var(--gold)}
 .scanner-market.bear{background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--red)}
 .scanner-market.crash{background:rgba(255,61,90,.18);border:1px solid rgba(255,61,90,.4);color:var(--red)}
+.sector-toggle-btn{background:rgba(255,255,255,.05);border:1px solid var(--bdr);border-radius:8px;padding:7px 12px;color:var(--txt2);font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;cursor:pointer;margin-bottom:8px;transition:all .2s}
+.sector-toggle-btn.active,.sector-toggle-btn:hover{border-color:var(--bdr2);color:var(--txt);background:rgba(255,255,255,.08)}
+.sector-panel{background:rgba(0,0,0,.2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:10px}
+.sector-row{display:flex;align-items:center;gap:8px;padding:6px 4px}
+.sector-rank{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:var(--txt3);flex:0 0 22px;text-align:center}
+.sector-name{font-size:11px;color:var(--txt);flex:0 0 84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sector-bar{flex:1;height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;min-width:40px}
+.sector-fill{height:100%;border-radius:4px;transition:width .8s ease}
+.sector-val{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;flex:0 0 56px;text-align:right}
+.sector-cnt{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt3);flex:0 0 30px;text-align:right}
+.sector-empty{font-size:11px;color:var(--txt3);text-align:center;padding:10px}
+.sector-note{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:8px;line-height:1.5}
 .v-name{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;letter-spacing:1px;color:var(--txt)}
 .v-sub{font-size:10px;color:var(--txt2);font-family:'JetBrains Mono',monospace;line-height:1.5}
 .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -619,6 +631,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     </div>
     <div class="scanner-meta" id="scannerMeta">読み込み中...</div>
     <div class="scanner-market" id="scannerMarket"></div>
+    <button class="sector-toggle-btn" id="sectorToggleBtn" onclick="toggleSectorView()">🏭 セクター相対強度を表示</button>
+    <div class="sector-panel" id="sectorPanel" style="display:none"></div>
     <div class="scanner-filters" id="scannerFilters">
       <button class="sf-btn active" data-filter="">ALL</button>
       <button class="sf-btn" data-filter="STRONG BUY">🚀 STRONG BUY</button>
@@ -2538,6 +2552,77 @@ function showSuccessMsg(msg){
 var _scanFilter = '';
 var _scanData = [];
 var _scannerLoaded = false;
+var _sectorOpen = false;
+
+// 銘柄→セクター マップ（セクター相対強度用）
+var SECTOR_MAP = {
+  '7203':'自動車・部品','7267':'自動車・部品','5108':'自動車・部品','6902':'自動車・部品','7269':'自動車・部品',
+  '6758':'電機・精密','6861':'電機・精密','7751':'電機・精密','6503':'電機・精密','6971':'電機・精密','6645':'電機・精密','6501':'電機・精密','6762':'電機・精密','6752':'電機・精密','7741':'電機・精密','7733':'電機・精密','4543':'電機・精密','6869':'電機・精密',
+  '8035':'半導体','6723':'半導体','3436':'半導体',
+  '6367':'機械・重工','6954':'機械・重工','6301':'機械・重工','6273':'機械・重工','6326':'機械・重工','7012':'機械・重工','6302':'機械・重工',
+  '8306':'銀行','8316':'銀行','8411':'銀行',
+  '8766':'保険・金融','8591':'保険・金融',
+  '9433':'通信','9432':'通信','4755':'通信',
+  '8058':'商社','8001':'商社','8015':'商社',
+  '4519':'医薬','4502':'医薬','4568':'医薬','4507':'医薬','4151':'医薬',
+  '2914':'食品','2802':'食品',
+  '4063':'化学','4901':'化学','4452':'化学',
+  '3382':'小売','9983':'小売','9843':'小売','8267':'小売','3088':'小売',
+  '4704':'IT・ソフト','9613':'IT・ソフト','3697':'IT・ソフト','4385':'IT・ソフト','2371':'IT・ソフト',
+  '7974':'ゲーム','7832':'ゲーム','9766':'ゲーム','3659':'ゲーム',
+  '9020':'運輸・空運','9021':'運輸・空運','9201':'運輸・空運','9202':'運輸・空運',
+  '9104':'海運','9107':'海運','9101':'海運',
+  '6098':'サービス','4661':'サービス','9735':'サービス','9602':'サービス','4324':'サービス',
+  '1925':'不動産・建設','8802':'不動産・建設','3289':'不動産・建設',
+  '5401':'鉄鋼','5020':'エネルギー','9984':'投資・その他'
+};
+
+function toggleSectorView() {
+  _sectorOpen = !_sectorOpen;
+  var p = document.getElementById('sectorPanel');
+  var b = document.getElementById('sectorToggleBtn');
+  if (_sectorOpen) {
+    renderSectorStrength();
+    if (p) p.style.display = 'block';
+    if (b) { b.classList.add('active'); b.textContent = '🏭 セクター相対強度を隠す'; }
+  } else {
+    if (p) p.style.display = 'none';
+    if (b) { b.classList.remove('active'); b.textContent = '🏭 セクター相対強度を表示'; }
+  }
+}
+
+function renderSectorStrength() {
+  var p = document.getElementById('sectorPanel');
+  if (!p) return;
+  if (!_scanData || _scanData.length === 0) {
+    p.innerHTML = '<div class="sector-empty">スキャンデータがありません</div>';
+    return;
+  }
+  var groups = {};
+  _scanData.forEach(function(r) {
+    var sec = SECTOR_MAP[r.code] || 'その他';
+    if (!groups[sec]) groups[sec] = { sum: 0, n: 0 };
+    groups[sec].sum += (r.score || 0);
+    groups[sec].n++;
+  });
+  var arr = Object.keys(groups).map(function(k) {
+    return { sector: k, avg: groups[k].sum / groups[k].n, n: groups[k].n };
+  });
+  arr.sort(function(a, b) { return b.avg - a.avg; });
+  var html = arr.map(function(s, i) {
+    var rank = i + 1;
+    var color = s.avg >= 75 ? 'var(--green)' : s.avg >= 50 ? 'var(--gold)' : 'var(--red)';
+    var medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    return '<div class="sector-row">' +
+      '<div class="sector-rank">' + medal + '</div>' +
+      '<div class="sector-name">' + s.sector + '</div>' +
+      '<div class="sector-bar"><div class="sector-fill" style="width:' + Math.min(100, s.avg) + '%;background:' + color + '"></div></div>' +
+      '<div class="sector-val" style="color:' + color + '">' + s.avg.toFixed(1) + 'pt</div>' +
+      '<div class="sector-cnt">' + s.n + '銘柄</div>' +
+      '</div>';
+  }).join('');
+  p.innerHTML = html + '<div class="sector-note">※ 直近スキャン結果（上位銘柄）のセクター別平均スコア。資金が向かっている業種ほど上位に表示されます。</div>';
+}
 
 function loadScanner(force) {
   if (_scannerLoaded && !force) return;
@@ -2590,6 +2675,7 @@ function loadScanner(force) {
     if (sbCount > 0) msgParts.push('🚀 STRONG BUY: ' + sbCount + '銘柄');
     if (meta) meta.textContent = msgParts.join('  |  ');
     renderScannerList();
+    if (_sectorOpen) renderSectorStrength();
     // 地合いバッジ（非同期で取得）
     fetchMarketCondition().then(function(mc){
       var smEl=document.getElementById('scannerMarket');

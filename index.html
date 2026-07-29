@@ -9,6 +9,12 @@
 <title>StockEdge</title>
 <link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+// worker.jsと共有する指標・スコアリングエンジン（indicators.js）を読み込み、
+// 既存の非moduleスクリプト（onclick属性含む）から使えるようwindowへ橋渡しする
+import { calcSMA, calcEMA, calcRSI, calcMACD, calcATR, calcBB, calcStoch, calcTradeScore } from '/indicators.js';
+Object.assign(window, { calcSMA, calcEMA, calcRSI, calcMACD, calcATR, calcBB, calcStoch, calcTradeScore });
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
 :root{
@@ -904,133 +910,7 @@ function sendNotification(code,sig,score,price){
   }
 }
 
-// ── TRADE SCORE ENGINE (0〜100点) ──────────────
-function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
-  var last=closes.length-1;
-  var cur=closes[last];
-  var score=50; // base
-  var details=[];
-  function add(name,pts,d,icon){
-    score+=pts;
-    details.push({name:name,pts:pts,d:d,icon:icon||'●'});
-  }
-
-  // ① 出来高前日比
-  if(last>=1&&volumes[last-1]>0){
-    var volPrev=volumes[last-1],volCur=volumes[last];
-    var volRatio=volCur/volPrev;
-    var volPct=((volRatio-1)*100).toFixed(0);
-    if(volRatio>=3)    add('出来高',+20,'前日比+'+(volRatio.toFixed(1))+'x — 急騰シグナル！','🔥');
-    else if(volRatio>=2.5) add('出来高',+15,'前日比+'+volPct+'% — 大幅増加','📊');
-    else if(volRatio>=2)   add('出来高',+10,'前日比+'+volPct+'% — 増加','📊');
-    else if(volRatio<=0.5) add('出来高',-10,'前日比'+volPct+'% — 閑散相場','📉');
-    else                   add('出来高',0,'前日比'+(volRatio>=1?'+':'')+volPct+'%','📊');
-  }
-
-  // ② EMA20/50/200トレンド配列
-  var ema20=calcEMA(closes,20),ema50=calcEMA(closes,50),ema200=calcEMA(closes,Math.min(200,closes.length));
-  var e20=ema20[last],e50=ema50[last],e200=ema200[last];
-  if(e20&&e50&&e200&&e20>e50&&e50>e200){
-    add('EMA配列',+15,'EMA20>50>200 完全上昇配列','📐');
-  } else if(e20&&e50&&e200&&e20<e50&&e50<e200){
-    add('EMA配列',-10,'EMA20<50<200 下降配列','📐');
-  } else if(e20&&e50&&e20>e50){
-    add('EMA配列',+8,'EMA20>50 上昇傾向','📐');
-  } else if(e20&&e50&&e20<e50){
-    add('EMA配列',-5,'EMA20<50 下降傾向','📐');
-  } else {
-    add('EMA配列',0,'EMA配列 データ不足','📐');
-  }
-
-  // ③ RSI
-  var rsiArr=calcRSI(closes,14);
-  var rsi=rsiArr[last]||50;
-  if(rsi>=50&&rsi<=65)       add('RSI',+10,'RSI='+rsi.toFixed(1)+' 理想的な強気域(50-65)','📊');
-  else if(rsi>65&&rsi<=70)   add('RSI',+3,'RSI='+rsi.toFixed(1)+' やや過熱気味','📊');
-  else if(rsi>70)             add('RSI',-10,'RSI='+rsi.toFixed(1)+' 買われすぎ — 反落注意','📊');
-  else if(rsi<30)             add('RSI',+5,'RSI='+rsi.toFixed(1)+' 売られすぎ — 反発期待','📊');
-  else if(rsi>=30&&rsi<50)   add('RSI',-3,'RSI='+rsi.toFixed(1)+' 弱気域','📊');
-
-  // ④ MACD GC/DC
-  // hist[last-1] が null/undefined/NaN の場合 ||0 で0扱いすると偽のGC/DCが成立するため、
-  // 明示的に有効値チェックし、無効なら加点0でGC/DC判定自体をスキップする
-  var macdObj=calcMACD(closes);
-  var histRaw=macdObj.hist[last],histPrevRaw=macdObj.hist[last-1];
-  var histValid=histRaw!=null&&!isNaN(histRaw)&&histPrevRaw!=null&&!isNaN(histPrevRaw);
-  var hist=null,histPrev=null,isGC=false,isDC=false;
-  if(!histValid){
-    add('MACD',0,'MACD データ不足','📊');
-  }else{
-    hist=histRaw;histPrev=histPrevRaw;
-    isGC=hist>0&&histPrev<=0;isDC=hist<0&&histPrev>=0;
-    if(isGC)            add('MACD',+10,'ゴールデンクロス発生！','📈');
-    else if(isDC)       add('MACD',-10,'デッドクロス発生！','📉');
-    else if(hist>0&&hist>histPrev) add('MACD',+7,'ヒストグラム拡大 上昇加速','📈');
-    else if(hist>0)     add('MACD',+5,'MACDプラス圏 上昇継続','📈');
-    else if(hist<0&&hist<histPrev) add('MACD',-7,'ヒストグラム拡大 下落加速','📉');
-    else                add('MACD',-5,'MACDマイナス圏 下落継続','📉');
-  }
-
-  // ⑤ ATRボラティリティ
-  var atrVal=calcATR(highs,lows,closes,14);
-  var atrPct=cur>0?atrVal/cur*100:2;
-  if(atrPct>=5)       add('ATRボラ',-10,'ATR='+atrPct.toFixed(2)+'% 過熱 — リスク大','⚡');
-  else if(atrPct>=3)  add('ATRボラ',-5,'ATR='+atrPct.toFixed(2)+'% やや高め — 注意','⚡');
-  else                add('ATRボラ',0,'ATR='+atrPct.toFixed(2)+'% 安定範囲','⚡');
-
-  // ⑥ ギャップ率（始値 vs 前日終値）
-  if(opens&&opens[last]&&last>=1&&closes[last-1]>0){
-    var gapPct=(opens[last]-closes[last-1])/closes[last-1]*100;
-    if(gapPct>=3&&gapPct<=8)  add('GU/GD',+10,'GU=+'+gapPct.toFixed(1)+'% 理想的ギャップアップ','🎯');
-    else if(gapPct>1)          add('GU/GD',+5,'GU=+'+gapPct.toFixed(1)+'%','🎯');
-    else if(gapPct>8)          add('GU/GD',0,'GU=+'+gapPct.toFixed(1)+'% 過度なGU','🎯');
-    else if(gapPct<-3)         add('GU/GD',-10,'GD='+gapPct.toFixed(1)+'% ギャップダウン','🎯');
-    else                       add('GU/GD',0,'ギャップ='+gapPct.toFixed(1)+'%','🎯');
-  }
-
-  // ⑦ 年初来高値（52週高値）
-  var nBars=Math.min(252,highs.length);
-  var high52=Math.max.apply(null,highs.slice(-nBars));
-  if(cur>=high52*0.995)        add('52W高値',+10,'52週高値更新中！ 強モメンタム','🏆');
-  else if(cur>=high52*0.97)    add('52W高値',+5,'52週高値の3%圏内 ブレイク候補','🏆');
-  else                         add('52W高値',0,'高値から'+((1-cur/high52)*100).toFixed(1)+'%下','🏆');
-
-  // ⑧ 材料・決算・アナリスト
-  if(summaryData){
-    var cal=summaryData.calendarEvents||{};
-    var earArr=cal.earnings&&cal.earnings.earningsDate;
-    var nextEar=earArr&&earArr[0]&&earArr[0].raw;
-    var now=Date.now()/1000;
-    if(nextEar){
-      var daysEar=Math.ceil((nextEar-now)/86400);
-      if(daysEar>=0&&daysEar<=7)      add('材料',+15,'決算まで'+daysEar+'日 — カタリスト大！','📅');
-      else if(daysEar>=0&&daysEar<=30) add('材料',+5,'決算まで'+daysEar+'日','📅');
-    }
-    var fd=summaryData.financialData||{};
-    var recKey=fd.recommendationKey||'';
-    if(recKey==='strong_buy')  add('アナリスト',+8,'コンセンサス: STRONG BUY','👨‍💼');
-    else if(recKey==='buy')    add('アナリスト',+4,'コンセンサス: BUY','👨‍💼');
-    else if(recKey==='sell')   add('アナリスト',-4,'コンセンサス: SELL','👨‍💼');
-    else if(recKey==='strong_sell') add('アナリスト',-8,'コンセンサス: STRONG SELL','👨‍💼');
-  }
-
-  // クランプ
-  score=Math.max(0,Math.min(100,score));
-
-  // シグナル判定
-  var signal,signalClass,signalIcon,signalJa;
-  if(score>=90){signal='STRONG BUY';signalClass='strong-buy';signalIcon='🚀';signalJa='強い買い';}
-  else if(score>=75){signal='BUY';signalClass='buy';signalIcon='📈';signalJa='買い';}
-  else if(score>=50){signal='NEUTRAL';signalClass='neutral';signalIcon='⚖️';signalJa='中立';}
-  else if(score>=30){signal='SELL';signalClass='sell';signalIcon='📉';signalJa='売り';}
-  else{signal='STRONG SELL';signalClass='strong-sell';signalIcon='⬇️';signalJa='強い売り';}
-
-  // vClass: signalClassと整合させる
-  var vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
-
-  return{score,signal,signalClass,signalIcon,signalJa,details,vClass,rsi,hist,isGC,isDC,atrPct,e20,e50,e200};
-}
-
+// ── TRADE SCORE ENGINE ── indicators.js (共有モジュール) の calcTradeScore を使用。ローカル実装は削除済み
 // ── YAHOO FINANCE API ──────────────────────────
 var RANGE_MAP={'1m':'1d','5m':'5d','15m':'5d','30m':'1mo','1h':'3mo','1d':'1y','1wk':'2y'};
 
@@ -1235,8 +1115,9 @@ async function analyze(){
     var bbU=bb.upper[last],bbL=bb.lower[last],bbM=bb.sma[last];
     var bbPos=bbU&&bbL?Math.max(0,Math.min(100,(cur-bbL)/(bbU-bbL)*100)):50;
     var stoch=calcStoch(highs,lows,closes,14,3,3);
-    var atr=calcATR(highs,lows,closes,14);
-    var atrPct=atr/cur*100;
+    var atrArr=calcATR(highs,lows,closes,14);
+    var atr=atrArr[last]||0;
+    var atrPct=cur>0?atr/cur*100:0;
     var sma5=calcSMA(closes,5),sma25=calcSMA(closes,25),sma75=calcSMA(closes,Math.min(75,closes.length-1));
     var ema9=calcEMA(closes,9);
     var sma5v=sma5[last],sma25v=sma25[last],sma75v=sma75[last],ema9v=ema9[last];
@@ -2142,58 +2023,7 @@ document.getElementById('sinput').addEventListener('keydown',function(e){if(e.ke
 // ============================================================
 // TECHNICAL CALCULATIONS
 // ============================================================
-function calcSMA(arr,p){
-  return arr.map((_,i)=>i<p-1?null:arr.slice(i-p+1,i+1).reduce((a,b)=>a+b,0)/p);
-}
-function calcEMA(arr,p){
-  const k=2/(p+1);let e=null;
-  return arr.map((v,i)=>{
-    if(!v){return null}
-    if(e===null){if(i<p-1)return null;e=arr.slice(0,p).reduce((a,b)=>a+b,0)/p;}
-    else e=v*k+e*(1-k);
-    return e;
-  });
-}
-function calcRSI(c,p=14){
-  const g=[],l=[];
-  for(let i=1;i<c.length;i++){const d=c[i]-c[i-1];g.push(d>0?d:0);l.push(d<0?-d:0);}
-  const r=[null];
-  let ag=g.slice(0,p).reduce((a,b)=>a+b,0)/p;
-  let al=l.slice(0,p).reduce((a,b)=>a+b,0)/p;
-  for(let i=p;i<g.length;i++){
-    ag=(ag*(p-1)+g[i])/p;al=(al*(p-1)+l[i])/p;
-    r.push(al===0?100:100-100/(1+ag/al));
-  }
-  while(r.length<p)r.unshift(null);
-  return r;
-}
-function calcMACD(c){
-  const e12=calcEMA(c,12),e26=calcEMA(c,26);
-  const ml=e12.map((v,i)=>v&&e26[i]?v-e26[i]:null);
-  const sig=calcEMA(ml.filter(v=>v!==null),9);
-  let si=0;
-  const sf=ml.map(v=>{if(v===null)return null;return sig[si++]??null;});
-  return{macd:ml,signal:sf,hist:ml.map((v,i)=>v&&sf[i]?v-sf[i]:null)};
-}
-function calcBB(c,p=20,k=2){
-  const sma=calcSMA(c,p);
-  return{
-    sma,
-    upper:sma.map((m,i)=>{if(!m)return null;const s=c.slice(i-p+1,i+1);const sd=Math.sqrt(s.reduce((a,b)=>a+(b-m)**2,0)/p);return m+k*sd;}),
-    lower:sma.map((m,i)=>{if(!m)return null;const s=c.slice(i-p+1,i+1);const sd=Math.sqrt(s.reduce((a,b)=>a+(b-m)**2,0)/p);return m-k*sd;}),
-  };
-}
-function calcStoch(hi,lo,cl,p=14,sk=3,sd=3){
-  const rk=cl.map((_,i)=>{if(i<p-1)return null;const hh=Math.max(...hi.slice(i-p+1,i+1)),ll=Math.min(...lo.slice(i-p+1,i+1));return hh===ll?50:(cl[i]-ll)/(hh-ll)*100;});
-  const kv=calcSMA(rk.filter(v=>v!==null),sk);
-  const dv=calcSMA(kv.filter(v=>v!==null),sd);
-  return{k:kv[kv.length-1]??50,d:dv[dv.length-1]??50};
-}
-function calcATR(hi,lo,cl,p=14){
-  const tr=[];for(let i=1;i<cl.length;i++)tr.push(Math.max(hi[i]-lo[i],Math.abs(hi[i]-cl[i-1]),Math.abs(lo[i]-cl[i-1])));
-  return tr.length>=p?tr.slice(-p).reduce((a,b)=>a+b,0)/p:tr[tr.length-1]||0;
-}
-
+// SMA/EMA/RSI/MACD/BB/Stoch/ATR は indicators.js（共有モジュール、window.*に橋渡し済み）を使用。ローカル実装は削除済み
 function calcIchimoku(hi,lo,cl){
   var n=cl.length;
   var tenkan=hi.map(function(_,i){

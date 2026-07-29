@@ -1,5 +1,7 @@
 // worker.js — kabu main entry point
 
+import { calcTradeScore } from './indicators.js';
+
 const YF_BASE = 'https://query1.finance.yahoo.com';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -156,148 +158,6 @@ async function handleGnews(request, url) {
   });
 }
 
-// ── TECHNICAL INDICATORS ───────────────────────────────────────────────────
-
-function calcEMA(closes, period) {
-  const k = 2 / (period + 1);
-  const result = [];
-  let ema = closes[0];
-  result.push(ema);
-  for (let i = 1; i < closes.length; i++) {
-    ema = closes[i] * k + ema * (1 - k);
-    result.push(ema);
-  }
-  return result;
-}
-
-function calcRSI(closes, period) {
-  period = period || 14;
-  const result = new Array(closes.length).fill(null);
-  if (closes.length < period + 1) return result;
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  let ag = gains / period, al = losses / period;
-  result[period] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-  for (let i = period + 1; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1];
-    ag = (ag * (period - 1) + Math.max(0, d)) / period;
-    al = (al * (period - 1) + Math.max(0, -d)) / period;
-    result[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-  }
-  return result;
-}
-
-function calcMACD(closes) {
-  const fast = calcEMA(closes, 12);
-  const slow = calcEMA(closes, 26);
-  const macdLine = closes.map((_, i) => fast[i] - slow[i]);
-  const signalLine = calcEMA(macdLine, 9);
-  const hist = macdLine.map((m, i) => m - signalLine[i]);
-  return { macd: macdLine, signal: signalLine, hist };
-}
-
-function calcATR(highs, lows, closes, period) {
-  period = period || 14;
-  const tr = [highs[0] - lows[0]];
-  for (let i = 1; i < highs.length; i++) {
-    tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
-  }
-  const result = new Array(highs.length).fill(null);
-  if (tr.length < period) return result;
-  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  result[period - 1] = atr;
-  for (let i = period; i < tr.length; i++) {
-    atr = (atr * (period - 1) + tr[i]) / period;
-    result[i] = atr;
-  }
-  return result;
-}
-
-// ── SCORING ENGINE ─────────────────────────────────────────────────────────
-
-function calcTradeScore(opens, highs, lows, closes, volumes) {
-  const last = closes.length - 1;
-  const cur = closes[last];
-  let score = 50;
-
-  // ① 出来高前日比
-  let volRatio = 1;
-  if (last >= 1 && volumes[last - 1] > 0) {
-    volRatio = volumes[last] / volumes[last - 1];
-    if (volRatio >= 3) score += 20;
-    else if (volRatio >= 2.5) score += 15;
-    else if (volRatio >= 2) score += 10;
-    else if (volRatio <= 0.5) score -= 10;
-  }
-
-  // ② EMA20/50/200
-  const ema20 = calcEMA(closes, 20);
-  const ema50 = calcEMA(closes, 50);
-  const ema200 = calcEMA(closes, 200);
-  const e20 = ema20[last], e50 = ema50[last], e200 = ema200[last];
-  let emaSignal = 'neutral';
-  if (cur > e20 && e20 > e50 && e50 > e200) { score += 15; emaSignal = 'perfect-up'; }
-  else if (cur < e20 && e20 < e50 && e50 < e200) { score -= 10; emaSignal = 'perfect-down'; }
-  else if (cur > e20 && e20 > e50) { score += 8; emaSignal = 'partial-up'; }
-  else if (cur > e20) { score += 5; emaSignal = 'above-ema20'; }
-
-  // ③ RSI
-  const rsiArr = calcRSI(closes, 14);
-  const rsi = rsiArr[last] || 50;
-  if (rsi >= 50 && rsi <= 65) score += 10;
-  else if (rsi > 65 && rsi <= 70) score += 3;
-  else if (rsi > 70) score -= 10;
-  else if (rsi < 30) score += 5;
-
-  // ④ MACD
-  const { hist } = calcMACD(closes);
-  const h = hist[last], ph = hist[last - 1];
-  let macdGc = false;
-  if (h != null && ph != null) {
-    if (ph < 0 && h > 0) { score += 10; macdGc = true; }
-    else if (ph > 0 && h < 0) score -= 10;
-    else if (h > 0 && h > ph) score += 7;
-    else if (h > 0) score += 5;
-    else if (h < 0 && h < ph) score -= 7;
-    else if (h < 0) score -= 5;
-  }
-
-  // ⑤ ATR
-  const atrArr = calcATR(highs, lows, closes, 14);
-  const atr = atrArr[last] || 0;
-  const atrPct = cur > 0 ? (atr / cur) * 100 : 0;
-  if (atrPct >= 5) score -= 10;
-  else if (atrPct >= 3) score -= 5;
-
-  // ⑥ ギャップ
-  const prevClose = closes[last - 1] || cur;
-  const gapPct = prevClose > 0 ? ((opens[last] - prevClose) / prevClose) * 100 : 0;
-  if (gapPct >= 3 && gapPct <= 8) score += 10;
-  else if (gapPct >= 1) score += 5;
-  else if (gapPct <= -3) score -= 10;
-
-  // ⑦ 52W高値
-  const h52 = highs.slice(Math.max(0, last - 252), last + 1);
-  const max52w = h52.length > 0 ? Math.max(...h52) : cur;
-  const pct52w = max52w > 0 ? (cur / max52w) * 100 : 50;
-  if (pct52w >= 99.5) score += 10;
-  else if (pct52w >= 97) score += 5;
-
-  score = Math.max(0, Math.min(100, score));
-
-  let signal, signalClass;
-  if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; }
-  else if (score >= 75) { signal = 'BUY'; signalClass = 'buy'; }
-  else if (score >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; }
-  else if (score >= 30) { signal = 'SELL'; signalClass = 'sell'; }
-  else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; }
-
-  return { score, signal, signalClass, rsi, atrPct, gapPct, pct52w, macdGc, emaSignal, nearHigh52w: pct52w >= 97, volRatio };
-}
-
 // ── STOCK LIST (TSE major stocks) ──────────────────────────────────────────
 
 const SCAN_STOCKS = [
@@ -361,7 +221,7 @@ async function scanStock(code, name, crumb, cookie) {
     }
     if (valid.c.length < 60) return null;
 
-    const ts = calcTradeScore(valid.o, valid.h, valid.l, valid.c, valid.v);
+    const ts = calcTradeScore(valid.o, valid.h, valid.l, valid.c, valid.v, null, '1d');
     const last = valid.c.length - 1;
     const price = valid.c[last];
     const prevClose = valid.c[last - 1] || price;

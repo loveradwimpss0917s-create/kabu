@@ -61,15 +61,29 @@ async function getCrumb() {
   return { crumb: null, cookie: null };
 }
 
+// 失敗時は null を返さず例外を投げる（HTTPステータス・Yahoo側のエラー内容を
+// 呼び出し側でログに残せるようにするため。「取得失敗」とだけ表示されて原因が
+// 分からない、という事態を避ける）
 async function fetchHistory(code, crumb, cookie) {
   const params = new URLSearchParams({ interval: '1d', range: '5y', includeAdjustedClose: 'true' });
   if (crumb) params.set('crumb', crumb);
   const headers = { 'User-Agent': UA, Accept: 'application/json', Referer: 'https://finance.yahoo.com' };
   if (cookie) headers.Cookie = cookie;
   const res = await fetch(`${YF_BASE}/v8/finance/chart/${code}.T?${params}`, { headers });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.chart?.result?.[0] || null;
+  const bodyText = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText} — ${bodyText.slice(0, 300)}`);
+  }
+  let data;
+  try { data = JSON.parse(bodyText); } catch (e) {
+    throw new Error(`JSON解析失敗 — ${bodyText.slice(0, 300)}`);
+  }
+  const chart = data?.chart?.result?.[0];
+  if (!chart) {
+    const err = data?.chart?.error;
+    throw new Error(`chart.resultが空 — ${err ? JSON.stringify(err) : bodyText.slice(0, 300)}`);
+  }
+  return chart;
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -431,6 +445,7 @@ function computeVerdict(dateList, dateStats, robustness) {
 async function main() {
   console.log(`設定: ${JSON.stringify(CONFIG)}`);
   const { crumb, cookie } = await getCrumb();
+  console.log(`crumb取得: ${crumb ? '成功(' + crumb.slice(0, 8) + '...)' : '失敗'} / cookie: ${cookie ? '取得済み(' + cookie.length + '文字)' : 'なし'}`);
   if (!crumb) console.warn('警告: crumb取得に失敗。crumb無しで続行します（一部リクエストが失敗する可能性）');
 
   const allRows = [];
@@ -440,16 +455,17 @@ async function main() {
     process.stdout.write(`[${idx + 1}/${SCAN_STOCKS.length}] ${code} ${name} ... `);
     try {
       const chart = await fetchHistory(code, crumb, cookie);
-      if (!chart) { console.log('取得失敗'); skippedStocks.push({ code, name, reason: 'fetch_failed' }); continue; }
       const rows = simulateStock(code, chart);
-      if (!rows.length) { console.log('データ不足'); skippedStocks.push({ code, name, reason: 'insufficient_data' }); continue; }
-      allRows.push(...rows);
-      console.log(`${rows.length}件`);
+      if (!rows.length) { console.log('データ不足'); skippedStocks.push({ code, name, reason: 'insufficient_data' }); }
+      else { allRows.push(...rows); console.log(`${rows.length}件`); }
     } catch (e) {
       console.log('エラー: ' + e.message);
       skippedStocks.push({ code, name, reason: e.message });
+    } finally {
+      // continue/catch のいずれの経路でも必ず1回だけ待機する
+      // （以前はcontinueが待機処理を素通りし、81銘柄が約1.5秒で終わってしまっていた）
+      await sleep(CONFIG.fetchDelayMs);
     }
-    await sleep(CONFIG.fetchDelayMs);
   }
 
   if (!allRows.length) {

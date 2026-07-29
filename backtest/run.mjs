@@ -18,8 +18,14 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const YF_BASE = 'https://query1.finance.yahoo.com';
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+// GitHub Actionsの共有IPから直接Yahoo Financeを叩くと、世界中の無関係なジョブと
+// 合算されたレート制限に恒常的に引っかかり続けることを実運用で確認した
+// （429が指数バックオフ・複数分の待機を挟んでも一切解消せず、81銘柄+crumb取得の
+// 全リクエストが68分間ノーガードで失敗し続けた）。
+// そのため、自前でYahooのcrumbを取得して直接叩くのではなく、既にYahoo Financeへの
+// 接続実績があるCloudflare Worker（本アプリ本体）の /yfin/* プロキシ経由でデータを
+// 取得する。crumbの取得・キャッシュはWorker側の既存ロジックにそのまま委ねる
+const WORKER_BASE = process.env.BT_WORKER_BASE || 'https://kabu.loveradwimps-s0917s.workers.dev';
 
 function num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
 
@@ -31,9 +37,8 @@ const CONFIG = {
   horizons: [1, 5, 20],
   warmupBars: 250,       // EMA200等が収束するまで捨てる日数
   bootstrapIters: Math.round(num(process.env.BT_BOOTSTRAP_ITERS, 2000)),
-  fetchDelayMs: 2500,    // Yahoo Financeへのリクエスト間隔（GitHub ActionsのIPは
-                          // 世界中の無関係なジョブと合算でレート制限にかかりやすいため広めに取る）
-  maxRetries: 4,          // 429受信時の再試行回数（指数バックオフ）
+  fetchDelayMs: 1500,    // Worker経由リクエストの間隔（Cloudflare/Yahoo双方への配慮）
+  maxRetries: 4,          // 429/5xx受信時の再試行回数（指数バックオフ）
 };
 
 const BUCKETS = ['0-30', '30-50', '50-75', '75-90', '90-100'];
@@ -45,59 +50,33 @@ const ITEM_NAME_TO_COL = {
 };
 const ITEM_COLS = ['vol_pts', 'ema_pts', 'rsi_pts', 'macd_pts', 'atr_pts', 'gap_pts', 'w52_pts', 'material_pts'];
 
-// ── Yahoo Finance ──────────────────────────────────────────────────────────
+// ── データ取得（Cloudflare Worker の /yfin/* プロキシ経由） ────────────────────
 
-// GitHub Actionsの共有IPは世界中の無関係なジョブと合算でYahoo側のレート制限(429)に
-// かかりやすい。429を受けたら Retry-After（無ければ指数バックオフ+ジッター）で待って
-// 再試行する。429以外のステータスはそのまま返す（呼び出し側で判定・診断する）
+// 429（Workerが内部でYahooから429を受けた場合に転送されうる）・5xx（Worker/Cloudflare側の
+// 一時的な不調）を対象にRetry-After（無ければ指数バックオフ+ジッター）で待って再試行する
 async function fetchWithRetry(url, options, maxRetries) {
   maxRetries = maxRetries ?? CONFIG.maxRetries;
   let res;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     res = await fetch(url, options);
-    if (res.status !== 429) return res;
+    if (res.status !== 429 && res.status < 500) return res;
     if (attempt === maxRetries) return res;
     const retryAfter = parseFloat(res.headers.get('retry-after'));
     const waitMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : (3000 * 2 ** attempt + Math.random() * 1000);
-    console.log(`  429受信 — ${Math.round(waitMs / 1000)}秒待って再試行 (${attempt + 1}/${maxRetries})`);
+    console.log(`  HTTP ${res.status}受信 — ${Math.round(waitMs / 1000)}秒待って再試行 (${attempt + 1}/${maxRetries})`);
     await sleep(waitMs);
   }
   return res;
 }
 
-async function getCrumb() {
-  try {
-    const r1 = await fetchWithRetry('https://fc.yahoo.com', { headers: { 'User-Agent': UA, Accept: '*/*' }, redirect: 'follow' });
-    const rawCookie = r1.headers.get('set-cookie') || '';
-    const cookie = rawCookie.split(',').map(c => c.trim().split(';')[0]).filter(Boolean).join('; ');
-    const r2 = await fetchWithRetry(`${YF_BASE}/v1/test/getcrumb`, {
-      headers: { 'User-Agent': UA, Cookie: cookie, Accept: 'text/plain,*/*', Referer: 'https://finance.yahoo.com' }
-    });
-    const bodyText = (await r2.text()).trim();
-    // HTTPステータスを見ずに本文だけで判定すると、429のエラーメッセージ本文
-    // （例: "Too Many Requests"）が"<"を含まないためcrumbとして誤って受理されてしまう。
-    // 必ずr2.okを確認してから採用する
-    if (!r2.ok) {
-      console.error(`crumb取得エラー: HTTP ${r2.status} ${r2.statusText} — ${bodyText.slice(0, 200)}`);
-      return { crumb: null, cookie };
-    }
-    if (bodyText && bodyText.length > 0 && !bodyText.includes('<')) return { crumb: bodyText, cookie };
-    console.error(`crumb取得エラー: 不正な形式のレスポンス — ${bodyText.slice(0, 200)}`);
-  } catch (e) {
-    console.error('crumb取得エラー:', e.message);
-  }
-  return { crumb: null, cookie: null };
-}
-
-// 失敗時は null を返さず例外を投げる（HTTPステータス・Yahoo側のエラー内容を
-// 呼び出し側でログに残せるようにするため。「取得失敗」とだけ表示されて原因が
-// 分からない、という事態を避ける）
-async function fetchHistory(code, crumb, cookie) {
+// 失敗時は null を返さず例外を投げる（HTTPステータス・エラー内容を呼び出し側で
+// ログに残せるようにするため。「取得失敗」とだけ表示されて原因が分からない、
+// という事態を避ける）
+async function fetchHistory(code) {
   const params = new URLSearchParams({ interval: '1d', range: '5y', includeAdjustedClose: 'true' });
-  if (crumb) params.set('crumb', crumb);
-  const headers = { 'User-Agent': UA, Accept: 'application/json', Referer: 'https://finance.yahoo.com' };
-  if (cookie) headers.Cookie = cookie;
-  const res = await fetchWithRetry(`${YF_BASE}/v8/finance/chart/${code}.T?${params}`, { headers });
+  const res = await fetchWithRetry(`${WORKER_BASE}/yfin/v8/finance/chart/${code}.T?${params}`, {
+    headers: { Accept: 'application/json' }
+  });
   const bodyText = await res.text();
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} — ${bodyText.slice(0, 300)}`);
@@ -472,9 +451,7 @@ function computeVerdict(dateList, dateStats, robustness) {
 
 async function main() {
   console.log(`設定: ${JSON.stringify(CONFIG)}`);
-  const { crumb, cookie } = await getCrumb();
-  console.log(`crumb取得: ${crumb ? '成功(' + crumb.slice(0, 8) + '...)' : '失敗'} / cookie: ${cookie ? '取得済み(' + cookie.length + '文字)' : 'なし'}`);
-  if (!crumb) console.warn('警告: crumb取得に失敗。crumb無しで続行します（一部リクエストが失敗する可能性）');
+  console.log(`データ取得元: ${WORKER_BASE}/yfin/*（Cloudflare Worker経由。crumb処理はWorker側に委ねる）`);
 
   const allRows = [];
   const skippedStocks = [];
@@ -482,7 +459,7 @@ async function main() {
     const [code, name] = SCAN_STOCKS[idx];
     process.stdout.write(`[${idx + 1}/${SCAN_STOCKS.length}] ${code} ${name} ... `);
     try {
-      const chart = await fetchHistory(code, crumb, cookie);
+      const chart = await fetchHistory(code);
       const rows = simulateStock(code, chart);
       if (!rows.length) { console.log('データ不足'); skippedStocks.push({ code, name, reason: 'insufficient_data' }); }
       else { allRows.push(...rows); console.log(`${rows.length}件`); }

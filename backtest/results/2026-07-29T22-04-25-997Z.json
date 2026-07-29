@@ -1,0 +1,547 @@
+{
+  "runId": "2026-07-29T22-04-25-997Z",
+  "config": {
+    "feeBpsOneWay": 5,
+    "slippageBpsOneWay": 10,
+    "taxRatePct": 20.315,
+    "horizons": [
+      1,
+      5,
+      20
+    ],
+    "warmupBars": 250,
+    "bootstrapIters": 2000,
+    "fetchDelayMs": 1500,
+    "maxRetries": 4
+  },
+  "universe": {
+    "stockCount": 81,
+    "scoredStockCount": 80,
+    "startDate": "2022-08-05",
+    "endDate": "2026-06-30"
+  },
+  "coverage": {
+    "totalObservations": 76240,
+    "skippedStocks": [
+      {
+        "code": "9613",
+        "name": "NTTデータ",
+        "reason": "HTTP 404 Not Found — {\"chart\":{\"result\":null,\"error\":{\"code\":\"Not Found\",\"description\":\"No data found, symbol may be delisted\"}}}"
+      }
+    ],
+    "scoredItems": "①〜⑦のみ（⑧材料・アナリストはsummaryData未使用のため検証不能）"
+  },
+  "buckets": [
+    {
+      "bucket": "0-30",
+      "scoreRange": [
+        0,
+        30
+      ],
+      "appLabel": "STRONG SELL",
+      "n": 2432,
+      "horizons": {
+        "1d": {
+          "n": 2432,
+          "grossMeanPct": 0.003,
+          "grossMedianPct": 0,
+          "grossStdPct": 2.148,
+          "grossWinRatePct": 49.5,
+          "netMeanPct": -0.297,
+          "netWinRatePct": 42.1,
+          "afterTaxMeanPct": -0.42,
+          "benchmarkMeanPct": -0.01,
+          "excessMeanPct": -0.287,
+          "excessMedianPct": -0.334,
+          "excessStdPct": 1.825,
+          "excessCI95": [
+            -0.373,
+            -0.202
+          ],
+          "maxDrawdownPct": 99.97,
+          "profitFactor": 0.67
+        },
+        "5d": {
+          "n": 2432,
+          "grossMeanPct": 1.074,
+          "grossMedianPct": 0.808,
+          "grossStdPct": 5.524,
+          "grossWinRatePct": 57.5,
+          "netMeanPct": 0.774,
+          "netWinRatePct": 54.9,
+          "afterTaxMeanPct": 0.288,
+          "benchmarkMeanPct": 0.966,
+          "excessMeanPct": -0.191,
+          "excessMedianPct": -0.435,
+          "excessStdPct": 4.603,
+          "excessCI95": [
+            -0.401,
+            0.03
+          ],
+          "maxDrawdownPct": 99.29,
+          "profitFactor": 1.48
+        },
+        "20d": {
+          "n": 2432,
+          "grossMeanPct": 3.456,
+          "grossMedianPct": 2.818,
+          "grossStdPct": 10.631,
+          "grossWinRatePct": 62.8,
+          "netMeanPct": 3.156,
+          "netWinRatePct": 61.1,
+          "afterTaxMeanPct": 2.007,
+          "benchmarkMeanPct": 3.319,
+          "excessMeanPct": -0.163,
+          "excessMedianPct": -0.56,
+          "excessStdPct": 9.271,
+          "excessCI95": [
+            -0.587,
+            0.255
+          ],
+          "maxDrawdownPct": 99.91,
+          "profitFactor": 2.26
+        }
+      }
+    },
+    {
+      "bucket": "30-50",
+      "scoreRange": [
+        30,
+        50
+      ],
+      "appLabel": "SELL",
+      "n": 20399,
+      "horizons": {
+        "1d": {
+          "n": 20399,
+          "grossMeanPct": 0.021,
+          "grossMedianPct": 0,
+          "grossStdPct": 1.507,
+          "grossWinRatePct": 49.3,
+          "netMeanPct": -0.279,
+          "netWinRatePct": 39.4,
+          "afterTaxMeanPct": -0.362,
+          "benchmarkMeanPct": 0.025,
+          "excessMeanPct": -0.304,
+          "excessMedianPct": -0.328,
+          "excessStdPct": 1.327,
+          "excessCI95": [
+            -0.328,
+            -0.28
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 0.59
+        },
+        "5d": {
+          "n": 20399,
+          "grossMeanPct": 0.445,
+          "grossMedianPct": 0.34,
+          "grossStdPct": 4.277,
+          "grossWinRatePct": 54.1,
+          "netMeanPct": 0.145,
+          "netWinRatePct": 50.5,
+          "afterTaxMeanPct": -0.182,
+          "benchmarkMeanPct": 0.506,
+          "excessMeanPct": -0.361,
+          "excessMedianPct": -0.469,
+          "excessStdPct": 3.645,
+          "excessCI95": [
+            -0.43,
+            -0.29
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 1.1
+        },
+        "20d": {
+          "n": 20399,
+          "grossMeanPct": 1.738,
+          "grossMedianPct": 1.278,
+          "grossStdPct": 8.533,
+          "grossWinRatePct": 57.1,
+          "netMeanPct": 1.438,
+          "netWinRatePct": 55.5,
+          "afterTaxMeanPct": 0.644,
+          "benchmarkMeanPct": 1.947,
+          "excessMeanPct": -0.51,
+          "excessMedianPct": -0.939,
+          "excessStdPct": 7.691,
+          "excessCI95": [
+            -0.647,
+            -0.361
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 1.58
+        }
+      }
+    },
+    {
+      "bucket": "50-75",
+      "scoreRange": [
+        50,
+        75
+      ],
+      "appLabel": "NEUTRAL",
+      "n": 36115,
+      "horizons": {
+        "1d": {
+          "n": 36115,
+          "grossMeanPct": -0.007,
+          "grossMedianPct": 0,
+          "grossStdPct": 1.513,
+          "grossWinRatePct": 49.1,
+          "netMeanPct": -0.307,
+          "netWinRatePct": 39.2,
+          "afterTaxMeanPct": -0.389,
+          "benchmarkMeanPct": -0.005,
+          "excessMeanPct": -0.302,
+          "excessMedianPct": -0.319,
+          "excessStdPct": 1.356,
+          "excessCI95": [
+            -0.314,
+            -0.289
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 0.57
+        },
+        "5d": {
+          "n": 36115,
+          "grossMeanPct": 0.28,
+          "grossMedianPct": 0.191,
+          "grossStdPct": 4.362,
+          "grossWinRatePct": 52.3,
+          "netMeanPct": -0.02,
+          "netWinRatePct": 48.7,
+          "afterTaxMeanPct": -0.334,
+          "benchmarkMeanPct": 0.281,
+          "excessMeanPct": -0.301,
+          "excessMedianPct": -0.426,
+          "excessStdPct": 3.782,
+          "excessCI95": [
+            -0.336,
+            -0.266
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 0.99
+        },
+        "20d": {
+          "n": 36115,
+          "grossMeanPct": 1.342,
+          "grossMedianPct": 0.927,
+          "grossStdPct": 8.738,
+          "grossWinRatePct": 55.1,
+          "netMeanPct": 1.042,
+          "netWinRatePct": 53.4,
+          "afterTaxMeanPct": 0.28,
+          "benchmarkMeanPct": 1.405,
+          "excessMeanPct": -0.363,
+          "excessMedianPct": -0.733,
+          "excessStdPct": 7.862,
+          "excessCI95": [
+            -0.436,
+            -0.287
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 1.38
+        }
+      }
+    },
+    {
+      "bucket": "75-90",
+      "scoreRange": [
+        75,
+        90
+      ],
+      "appLabel": "BUY",
+      "n": 15657,
+      "horizons": {
+        "1d": {
+          "n": 15657,
+          "grossMeanPct": -0.006,
+          "grossMedianPct": -0.015,
+          "grossStdPct": 1.437,
+          "grossWinRatePct": 48.8,
+          "netMeanPct": -0.306,
+          "netWinRatePct": 38.8,
+          "afterTaxMeanPct": -0.384,
+          "benchmarkMeanPct": -0.014,
+          "excessMeanPct": -0.292,
+          "excessMedianPct": -0.313,
+          "excessStdPct": 1.304,
+          "excessCI95": [
+            -0.315,
+            -0.268
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 0.56
+        },
+        "5d": {
+          "n": 15657,
+          "grossMeanPct": 0.237,
+          "grossMedianPct": 0.097,
+          "grossStdPct": 4.117,
+          "grossWinRatePct": 51.2,
+          "netMeanPct": -0.063,
+          "netWinRatePct": 47.4,
+          "afterTaxMeanPct": -0.357,
+          "benchmarkMeanPct": 0.176,
+          "excessMeanPct": -0.239,
+          "excessMedianPct": -0.371,
+          "excessStdPct": 3.603,
+          "excessCI95": [
+            -0.306,
+            -0.173
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 0.96
+        },
+        "20d": {
+          "n": 15657,
+          "grossMeanPct": 1.577,
+          "grossMedianPct": 1.217,
+          "grossStdPct": 8.666,
+          "grossWinRatePct": 56.7,
+          "netMeanPct": 1.277,
+          "netWinRatePct": 55.1,
+          "afterTaxMeanPct": 0.492,
+          "benchmarkMeanPct": 1.205,
+          "excessMeanPct": 0.072,
+          "excessMedianPct": -0.321,
+          "excessStdPct": 7.828,
+          "excessCI95": [
+            -0.062,
+            0.208
+          ],
+          "maxDrawdownPct": 100,
+          "profitFactor": 1.49
+        }
+      }
+    },
+    {
+      "bucket": "90-100",
+      "scoreRange": [
+        90,
+        100
+      ],
+      "appLabel": "STRONG BUY",
+      "n": 1637,
+      "horizons": {
+        "1d": {
+          "n": 1637,
+          "grossMeanPct": 0.016,
+          "grossMedianPct": -0.079,
+          "grossStdPct": 1.666,
+          "grossWinRatePct": 47.3,
+          "netMeanPct": -0.284,
+          "netWinRatePct": 39.4,
+          "afterTaxMeanPct": -0.378,
+          "benchmarkMeanPct": 0.019,
+          "excessMeanPct": -0.303,
+          "excessMedianPct": -0.347,
+          "excessStdPct": 1.509,
+          "excessCI95": [
+            -0.377,
+            -0.229
+          ],
+          "maxDrawdownPct": 99.3,
+          "profitFactor": 0.62
+        },
+        "5d": {
+          "n": 1637,
+          "grossMeanPct": 0.335,
+          "grossMedianPct": 0.087,
+          "grossStdPct": 4.26,
+          "grossWinRatePct": 50.8,
+          "netMeanPct": 0.035,
+          "netWinRatePct": 47.8,
+          "afterTaxMeanPct": -0.284,
+          "benchmarkMeanPct": 0.3,
+          "excessMeanPct": -0.265,
+          "excessMedianPct": -0.389,
+          "excessStdPct": 3.657,
+          "excessCI95": [
+            -0.467,
+            -0.076
+          ],
+          "maxDrawdownPct": 97.67,
+          "profitFactor": 1.02
+        },
+        "20d": {
+          "n": 1637,
+          "grossMeanPct": 1.638,
+          "grossMedianPct": 1.408,
+          "grossStdPct": 8.074,
+          "grossWinRatePct": 57.7,
+          "netMeanPct": 1.338,
+          "netWinRatePct": 56.2,
+          "afterTaxMeanPct": 0.577,
+          "benchmarkMeanPct": 1.397,
+          "excessMeanPct": -0.059,
+          "excessMedianPct": -0.085,
+          "excessStdPct": 7.467,
+          "excessCI95": [
+            -0.464,
+            0.328
+          ],
+          "maxDrawdownPct": 99.7,
+          "profitFactor": 1.56
+        }
+      }
+    }
+  ],
+  "robustness": {
+    "spearmanRhoBucketVsExcess": {
+      "1": -0.3,
+      "5": -0.1,
+      "20": 0.6
+    },
+    "subPeriods": [
+      {
+        "label": "Y1",
+        "start": "2022-08-05",
+        "end": "2023-11-20",
+        "n": 5996,
+        "b4b5ExcessMeanPct20d": -0.261
+      },
+      {
+        "label": "Y2",
+        "start": "2023-11-21",
+        "end": "2025-03-12",
+        "n": 5721,
+        "b4b5ExcessMeanPct20d": 0.156
+      },
+      {
+        "label": "Y3",
+        "start": "2025-03-13",
+        "end": "2026-06-30",
+        "n": 5577,
+        "b4b5ExcessMeanPct20d": 0.306
+      }
+    ]
+  },
+  "itemAnalysis": [
+    {
+      "item": "vol_pts",
+      "nPositive": 3323,
+      "nZeroOrNegative": 72917,
+      "meanExcess20dWhenPositive": -0.264,
+      "meanExcess20dWhenNotPositive": -0.302,
+      "difference": 0.038,
+      "differenceCI95": [
+        -0.25,
+        0.335
+      ],
+      "note": null
+    },
+    {
+      "item": "ema_pts",
+      "nPositive": 46638,
+      "nZeroOrNegative": 29602,
+      "meanExcess20dWhenPositive": -0.202,
+      "meanExcess20dWhenNotPositive": -0.455,
+      "difference": 0.253,
+      "differenceCI95": [
+        0.065,
+        0.448
+      ],
+      "note": null
+    },
+    {
+      "item": "rsi_pts",
+      "nPositive": 40196,
+      "nZeroOrNegative": 36044,
+      "meanExcess20dWhenPositive": -0.141,
+      "meanExcess20dWhenNotPositive": -0.477,
+      "difference": 0.335,
+      "differenceCI95": [
+        0.171,
+        0.505
+      ],
+      "note": null
+    },
+    {
+      "item": "macd_pts",
+      "nPositive": 38699,
+      "nZeroOrNegative": 37541,
+      "meanExcess20dWhenPositive": -0.165,
+      "meanExcess20dWhenNotPositive": -0.439,
+      "difference": 0.275,
+      "differenceCI95": [
+        0.134,
+        0.433
+      ],
+      "note": null
+    },
+    {
+      "item": "atr_pts",
+      "nPositive": 0,
+      "nZeroOrNegative": 76240,
+      "meanExcess20dWhenPositive": null,
+      "meanExcess20dWhenNotPositive": -0.3,
+      "difference": null,
+      "differenceCI95": [
+        null,
+        null
+      ],
+      "note": null
+    },
+    {
+      "item": "gap_pts",
+      "nPositive": 13230,
+      "nZeroOrNegative": 63010,
+      "meanExcess20dWhenPositive": -0.321,
+      "meanExcess20dWhenNotPositive": -0.296,
+      "difference": -0.025,
+      "differenceCI95": [
+        -0.236,
+        0.192
+      ],
+      "note": null
+    },
+    {
+      "item": "w52_pts",
+      "nPositive": 12255,
+      "nZeroOrNegative": 63985,
+      "meanExcess20dWhenPositive": -0.065,
+      "meanExcess20dWhenNotPositive": -0.345,
+      "difference": 0.28,
+      "differenceCI95": [
+        0.09,
+        0.487
+      ],
+      "note": null
+    },
+    {
+      "item": "material_pts",
+      "nPositive": 0,
+      "nZeroOrNegative": 76240,
+      "meanExcess20dWhenPositive": null,
+      "meanExcess20dWhenNotPositive": -0.3,
+      "difference": null,
+      "differenceCI95": [
+        null,
+        null
+      ],
+      "note": "検証不能: summaryData未使用のため常に0（過去時点の決算日履歴・アナリスト評価はYahooから取得できないため）"
+    }
+  ],
+  "verdict": {
+    "criterion1_ci95LowerAboveZero": false,
+    "criterion1_detail": {
+      "b4b5ExcessCI95_20d": [
+        -0.075,
+        null
+      ]
+    },
+    "criterion2_spearmanRhoAtLeast08": false,
+    "criterion2_detail": {
+      "rho20d": 0.6
+    },
+    "criterion3_signPositiveIn2of3SubPeriods": true,
+    "criterion3_detail": {
+      "positiveSubPeriods": 2,
+      "of": 3
+    },
+    "conclusion": "EDGE_NOT_CONFIRMED",
+    "survivorshipBiasNote": "対象はSCAN_STOCKS（現在の大型株81銘柄の固定リスト）であり、3年間生き残り今も大型株である銘柄のみを対象としているため、結果は構造的に上方バイアスを持つ。EDGE_CONFIRMEDでも、この基準を辛うじて満たす程度の弱い結果（例: 20日超過リターンが+0.1%程度）は「優位性なし」と解釈するのが妥当である。"
+  }
+}

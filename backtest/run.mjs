@@ -43,9 +43,14 @@ const CONFIG = {
 
 const BUCKETS = ['0-30', '30-50', '50-75', '75-90', '90-100'];
 const APP_LABEL = { '0-30': 'STRONG SELL', '30-50': 'SELL', '50-75': 'NEUTRAL', '75-90': 'BUY', '90-100': 'STRONG BUY' };
+// Task E-2で出来高・GU/GDはスコア非加点の情報表示に変更されたため名称に(参考)が付いた。
+// 新旧いずれの表記でも同じ列に集計されるよう両方を登録しておく
 const ITEM_NAME_TO_COL = {
-  '出来高': 'vol_pts', 'EMA配列': 'ema_pts', 'RSI': 'rsi_pts', 'MACD': 'macd_pts',
-  'ATRボラ': 'atr_pts', 'GU/GD': 'gap_pts', '52W高値': 'w52_pts',
+  '出来高': 'vol_pts', '出来高(参考)': 'vol_pts',
+  'EMA配列': 'ema_pts', 'RSI': 'rsi_pts', 'MACD': 'macd_pts',
+  'ATRボラ': 'atr_pts',
+  'GU/GD': 'gap_pts', 'GU/GD(参考)': 'gap_pts',
+  '52W高値': 'w52_pts',
   '材料': 'material_pts', 'アナリスト': 'material_pts'
 };
 const ITEM_COLS = ['vol_pts', 'ema_pts', 'rsi_pts', 'macd_pts', 'atr_pts', 'gap_pts', 'w52_pts', 'material_pts'];

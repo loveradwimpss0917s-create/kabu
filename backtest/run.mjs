@@ -31,7 +31,9 @@ const CONFIG = {
   horizons: [1, 5, 20],
   warmupBars: 250,       // EMA200等が収束するまで捨てる日数
   bootstrapIters: Math.round(num(process.env.BT_BOOTSTRAP_ITERS, 2000)),
-  fetchDelayMs: 1200,    // Yahoo Financeへのリクエスト間隔
+  fetchDelayMs: 2500,    // Yahoo Financeへのリクエスト間隔（GitHub ActionsのIPは
+                          // 世界中の無関係なジョブと合算でレート制限にかかりやすいため広めに取る）
+  maxRetries: 4,          // 429受信時の再試行回数（指数バックオフ）
 };
 
 const BUCKETS = ['0-30', '30-50', '50-75', '75-90', '90-100'];
@@ -45,16 +47,42 @@ const ITEM_COLS = ['vol_pts', 'ema_pts', 'rsi_pts', 'macd_pts', 'atr_pts', 'gap_
 
 // ── Yahoo Finance ──────────────────────────────────────────────────────────
 
+// GitHub Actionsの共有IPは世界中の無関係なジョブと合算でYahoo側のレート制限(429)に
+// かかりやすい。429を受けたら Retry-After（無ければ指数バックオフ+ジッター）で待って
+// 再試行する。429以外のステータスはそのまま返す（呼び出し側で判定・診断する）
+async function fetchWithRetry(url, options, maxRetries) {
+  maxRetries = maxRetries ?? CONFIG.maxRetries;
+  let res;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    res = await fetch(url, options);
+    if (res.status !== 429) return res;
+    if (attempt === maxRetries) return res;
+    const retryAfter = parseFloat(res.headers.get('retry-after'));
+    const waitMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : (3000 * 2 ** attempt + Math.random() * 1000);
+    console.log(`  429受信 — ${Math.round(waitMs / 1000)}秒待って再試行 (${attempt + 1}/${maxRetries})`);
+    await sleep(waitMs);
+  }
+  return res;
+}
+
 async function getCrumb() {
   try {
-    const r1 = await fetch('https://fc.yahoo.com', { headers: { 'User-Agent': UA, Accept: '*/*' }, redirect: 'follow' });
+    const r1 = await fetchWithRetry('https://fc.yahoo.com', { headers: { 'User-Agent': UA, Accept: '*/*' }, redirect: 'follow' });
     const rawCookie = r1.headers.get('set-cookie') || '';
     const cookie = rawCookie.split(',').map(c => c.trim().split(';')[0]).filter(Boolean).join('; ');
-    const r2 = await fetch(`${YF_BASE}/v1/test/getcrumb`, {
+    const r2 = await fetchWithRetry(`${YF_BASE}/v1/test/getcrumb`, {
       headers: { 'User-Agent': UA, Cookie: cookie, Accept: 'text/plain,*/*', Referer: 'https://finance.yahoo.com' }
     });
-    const crumb = (await r2.text()).trim();
-    if (crumb && crumb.length > 0 && !crumb.includes('<')) return { crumb, cookie };
+    const bodyText = (await r2.text()).trim();
+    // HTTPステータスを見ずに本文だけで判定すると、429のエラーメッセージ本文
+    // （例: "Too Many Requests"）が"<"を含まないためcrumbとして誤って受理されてしまう。
+    // 必ずr2.okを確認してから採用する
+    if (!r2.ok) {
+      console.error(`crumb取得エラー: HTTP ${r2.status} ${r2.statusText} — ${bodyText.slice(0, 200)}`);
+      return { crumb: null, cookie };
+    }
+    if (bodyText && bodyText.length > 0 && !bodyText.includes('<')) return { crumb: bodyText, cookie };
+    console.error(`crumb取得エラー: 不正な形式のレスポンス — ${bodyText.slice(0, 200)}`);
   } catch (e) {
     console.error('crumb取得エラー:', e.message);
   }
@@ -69,7 +97,7 @@ async function fetchHistory(code, crumb, cookie) {
   if (crumb) params.set('crumb', crumb);
   const headers = { 'User-Agent': UA, Accept: 'application/json', Referer: 'https://finance.yahoo.com' };
   if (cookie) headers.Cookie = cookie;
-  const res = await fetch(`${YF_BASE}/v8/finance/chart/${code}.T?${params}`, { headers });
+  const res = await fetchWithRetry(`${YF_BASE}/v8/finance/chart/${code}.T?${params}`, { headers });
   const bodyText = await res.text();
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} — ${bodyText.slice(0, 300)}`);

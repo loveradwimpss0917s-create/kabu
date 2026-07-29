@@ -8,7 +8,9 @@ directory = "."
 binding = "ASSETS"
 
 [triggers]
-crons = ["0 23 * * *"]
+# 日次スキャナー（毎日23:00/23:10 UTC = 8:00/8:10 JST）を前半40銘柄・後半41銘柄に分割実行。
+# 1本のcronで81銘柄全てを走査するとサブリクエスト上限(50)を超え毎回失敗するため。
+crons = ["0 23 * * *", "10 23 * * *"]
 
 [vars]
 SUPABASE_URL = "https://fhpwmafnbzmtjemldmcy.supabase.co"

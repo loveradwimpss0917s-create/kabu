@@ -1,5 +1,8 @@
 // worker.js — kabu main entry point
 
+import { calcTradeScore, buildAdjustedSeries } from './indicators.js';
+import { SCAN_STOCKS } from './stocks.js';
+
 const YF_BASE = 'https://query1.finance.yahoo.com';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -73,11 +76,24 @@ async function getMarketCondition(crumb, cookie) {
 
 // ── PROXY HANDLERS ─────────────────────────────────────────────────────────
 
+// /yfin/* が転送してよいYahoo Finance APIパス（前方一致）。
+// 新しいYahooエンドポイントを使う機能を追加する場合はここに追記すること。
+const YFIN_ALLOWED_PATH_PREFIXES = [
+  '/v8/finance/chart/',
+  '/v10/finance/quoteSummary/',
+  '/v1/finance/search'
+];
+
 async function handleYfin(request, url) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders() });
   }
   const path = url.pathname.replace(/^\/yfin/, '');
+  if (!YFIN_ALLOWED_PATH_PREFIXES.some(p => path.startsWith(p))) {
+    return new Response(JSON.stringify({ error: 'このパスは許可されていません' }), {
+      status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
+    });
+  }
   const params = new URLSearchParams(url.search);
   params.delete('_t');
   const { crumb, cookie } = await getCrumb();
@@ -156,180 +172,6 @@ async function handleGnews(request, url) {
   });
 }
 
-// ── TECHNICAL INDICATORS ───────────────────────────────────────────────────
-
-function calcEMA(closes, period) {
-  const k = 2 / (period + 1);
-  const result = [];
-  let ema = closes[0];
-  result.push(ema);
-  for (let i = 1; i < closes.length; i++) {
-    ema = closes[i] * k + ema * (1 - k);
-    result.push(ema);
-  }
-  return result;
-}
-
-function calcRSI(closes, period) {
-  period = period || 14;
-  const result = new Array(closes.length).fill(null);
-  if (closes.length < period + 1) return result;
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  let ag = gains / period, al = losses / period;
-  result[period] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-  for (let i = period + 1; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1];
-    ag = (ag * (period - 1) + Math.max(0, d)) / period;
-    al = (al * (period - 1) + Math.max(0, -d)) / period;
-    result[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-  }
-  return result;
-}
-
-function calcMACD(closes) {
-  const fast = calcEMA(closes, 12);
-  const slow = calcEMA(closes, 26);
-  const macdLine = closes.map((_, i) => fast[i] - slow[i]);
-  const signalLine = calcEMA(macdLine, 9);
-  const hist = macdLine.map((m, i) => m - signalLine[i]);
-  return { macd: macdLine, signal: signalLine, hist };
-}
-
-function calcATR(highs, lows, closes, period) {
-  period = period || 14;
-  const tr = [highs[0] - lows[0]];
-  for (let i = 1; i < highs.length; i++) {
-    tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
-  }
-  const result = new Array(highs.length).fill(null);
-  if (tr.length < period) return result;
-  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  result[period - 1] = atr;
-  for (let i = period; i < tr.length; i++) {
-    atr = (atr * (period - 1) + tr[i]) / period;
-    result[i] = atr;
-  }
-  return result;
-}
-
-// ── SCORING ENGINE ─────────────────────────────────────────────────────────
-
-function calcTradeScore(opens, highs, lows, closes, volumes) {
-  const last = closes.length - 1;
-  const cur = closes[last];
-  let score = 50;
-
-  // ① 出来高前日比
-  let volRatio = 1;
-  if (last >= 1 && volumes[last - 1] > 0) {
-    volRatio = volumes[last] / volumes[last - 1];
-    if (volRatio >= 3) score += 20;
-    else if (volRatio >= 2.5) score += 15;
-    else if (volRatio >= 2) score += 10;
-    else if (volRatio <= 0.5) score -= 10;
-  }
-
-  // ② EMA20/50/200
-  const ema20 = calcEMA(closes, 20);
-  const ema50 = calcEMA(closes, 50);
-  const ema200 = calcEMA(closes, 200);
-  const e20 = ema20[last], e50 = ema50[last], e200 = ema200[last];
-  let emaSignal = 'neutral';
-  if (cur > e20 && e20 > e50 && e50 > e200) { score += 15; emaSignal = 'perfect-up'; }
-  else if (cur < e20 && e20 < e50 && e50 < e200) { score -= 10; emaSignal = 'perfect-down'; }
-  else if (cur > e20 && e20 > e50) { score += 8; emaSignal = 'partial-up'; }
-  else if (cur > e20) { score += 5; emaSignal = 'above-ema20'; }
-
-  // ③ RSI
-  const rsiArr = calcRSI(closes, 14);
-  const rsi = rsiArr[last] || 50;
-  if (rsi >= 50 && rsi <= 65) score += 10;
-  else if (rsi > 65 && rsi <= 70) score += 3;
-  else if (rsi > 70) score -= 10;
-  else if (rsi < 30) score += 5;
-
-  // ④ MACD
-  const { hist } = calcMACD(closes);
-  const h = hist[last], ph = hist[last - 1];
-  let macdGc = false;
-  if (h != null && ph != null) {
-    if (ph < 0 && h > 0) { score += 10; macdGc = true; }
-    else if (ph > 0 && h < 0) score -= 10;
-    else if (h > 0 && h > ph) score += 7;
-    else if (h > 0) score += 5;
-    else if (h < 0 && h < ph) score -= 7;
-    else if (h < 0) score -= 5;
-  }
-
-  // ⑤ ATR
-  const atrArr = calcATR(highs, lows, closes, 14);
-  const atr = atrArr[last] || 0;
-  const atrPct = cur > 0 ? (atr / cur) * 100 : 0;
-  if (atrPct >= 5) score -= 10;
-  else if (atrPct >= 3) score -= 5;
-
-  // ⑥ ギャップ
-  const prevClose = closes[last - 1] || cur;
-  const gapPct = prevClose > 0 ? ((opens[last] - prevClose) / prevClose) * 100 : 0;
-  if (gapPct >= 3 && gapPct <= 8) score += 10;
-  else if (gapPct >= 1) score += 5;
-  else if (gapPct <= -3) score -= 10;
-
-  // ⑦ 52W高値
-  const h52 = highs.slice(Math.max(0, last - 252), last + 1);
-  const max52w = h52.length > 0 ? Math.max(...h52) : cur;
-  const pct52w = max52w > 0 ? (cur / max52w) * 100 : 50;
-  if (pct52w >= 99.5) score += 10;
-  else if (pct52w >= 97) score += 5;
-
-  score = Math.max(0, Math.min(100, score));
-
-  let signal, signalClass;
-  if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; }
-  else if (score >= 75) { signal = 'BUY'; signalClass = 'buy'; }
-  else if (score >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; }
-  else if (score >= 30) { signal = 'SELL'; signalClass = 'sell'; }
-  else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; }
-
-  return { score, signal, signalClass, rsi, atrPct, gapPct, pct52w, macdGc, emaSignal, nearHigh52w: pct52w >= 97, volRatio };
-}
-
-// ── STOCK LIST (TSE major stocks) ──────────────────────────────────────────
-
-const SCAN_STOCKS = [
-  ['7203','トヨタ自動車'],['6758','ソニーグループ'],['9984','ソフトバンクグループ'],
-  ['8306','三菱UFJ FG'],['6861','キーエンス'],['9433','KDDI'],
-  ['7974','任天堂'],['8058','三菱商事'],['4519','中外製薬'],
-  ['6098','リクルートHD'],['4063','信越化学工業'],['8035','東京エレクトロン'],
-  ['4661','オリエンタルランド'],['7267','ホンダ'],['8316','三井住友FG'],
-  ['6367','ダイキン工業'],['4502','武田薬品工業'],['9432','NTT'],
-  ['7751','キヤノン'],['8001','伊藤忠商事'],['6954','ファナック'],
-  ['2914','JT'],['6301','コマツ'],['4568','第一三共'],
-  ['9020','JR東日本'],['3382','セブン&アイHD'],['4543','テルモ'],
-  ['6503','三菱電機'],['5108','ブリヂストン'],['8766','東京海上HD'],
-  ['7741','HOYA'],['9983','ファーストリテイリング'],['6971','京セラ'],
-  ['7832','バンダイナムコHD'],['6273','SMC'],['2802','味の素'],
-  ['6902','デンソー'],['8411','みずほFG'],['7733','オリンパス'],
-  ['4704','トレンドマイクロ'],['6645','オムロン'],['5401','日本製鉄'],
-  ['9613','NTTデータ'],['6869','シスメックス'],['6501','日立製作所'],
-  ['7269','スズキ'],['6723','ルネサスエレクトロニクス'],['9766','コナミHD'],
-  ['6326','クボタ'],['5020','ENEOSホールディングス'],['4901','富士フイルムHD'],
-  ['9104','商船三井'],['9107','川崎汽船'],['9101','日本郵船'],
-  ['4507','塩野義製薬'],['6762','TDK'],['6752','パナソニックHD'],
-  ['3436','SUMCO'],['9735','セコム'],['8015','豊田通商'],
-  ['1925','大和ハウス工業'],['8802','三菱地所'],['9602','東宝'],
-  ['4324','電通グループ'],['9021','JR西日本'],['4755','楽天グループ'],
-  ['3697','SHIFT'],['4385','メルカリ'],['3659','ネクソン'],
-  ['2371','カカクコム'],['4452','花王'],['7012','川崎重工業'],
-  ['6302','住友重機械工業'],['3289','東急不動産HD'],['4151','協和キリン'],
-  ['9843','ニトリHD'],['8267','イオン'],['3088','マツキヨコクミン'],
-  ['9201','日本航空'],['9202','ANAホールディングス'],['8591','オリックス'],
-];
-
 // ── SCANNER LOGIC ──────────────────────────────────────────────────────────
 
 async function scanStock(code, name, crumb, cookie) {
@@ -349,22 +191,15 @@ async function scanStock(code, name, crumb, cookie) {
     const chart = data?.chart?.result?.[0];
     if (!chart) return null;
 
-    const q = chart.indicators?.quote?.[0] || {};
-    const raw = { o: q.open || [], h: q.high || [], l: q.low || [], c: q.close || [], v: q.volume || [] };
+    // 指標計算には分割・配当調整後の系列を使う（未調整のままだと配当落ちが指標に混入するため）。
+    // 画面/DBに出す価格・前日比は実際の株価（未調整）を使う
+    const series = buildAdjustedSeries(chart);
+    if (series.c.length < 60) return null;
 
-    const valid = { o: [], h: [], l: [], c: [], v: [] };
-    for (let i = 0; i < raw.c.length; i++) {
-      if (raw.c[i] != null && raw.o[i] != null && raw.h[i] != null && raw.l[i] != null && raw.v[i] != null) {
-        valid.o.push(raw.o[i]); valid.h.push(raw.h[i]); valid.l.push(raw.l[i]);
-        valid.c.push(raw.c[i]); valid.v.push(raw.v[i]);
-      }
-    }
-    if (valid.c.length < 60) return null;
-
-    const ts = calcTradeScore(valid.o, valid.h, valid.l, valid.c, valid.v);
-    const last = valid.c.length - 1;
-    const price = valid.c[last];
-    const prevClose = valid.c[last - 1] || price;
+    const ts = calcTradeScore(series.o, series.h, series.l, series.c, series.v, null, '1d');
+    const last = series.c.length - 1;
+    const price = series.rawClose[last];
+    const prevClose = series.rawClose[last - 1] || price;
     const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
 
     return {
@@ -390,13 +225,18 @@ async function scanStock(code, name, crumb, cookie) {
   }
 }
 
-async function runScanner(env, maxStocks) {
+// opts.offset/opts.limit で SCAN_STOCKS の部分範囲だけを走査する（日次cronを2本に分割し
+// 81銘柄全体を1本あたり50サブリクエスト未満に収めるため）。省略時は全銘柄を対象にする。
+async function runScanner(env, opts) {
+  const offset = (opts && opts.offset) || 0;
+  const limit = opts && opts.limit;
+
   const { crumb, cookie } = await getCrumb();
   if (!crumb) throw new Error('crumb取得失敗');
 
   const mc = await getMarketCondition(crumb, cookie);
 
-  const stockList = maxStocks ? SCAN_STOCKS.slice(0, maxStocks) : SCAN_STOCKS;
+  const stockList = limit != null ? SCAN_STOCKS.slice(offset, offset + limit) : SCAN_STOCKS.slice(offset);
   const results = [];
   const batchSize = 10;
   const scanStart = Date.now();
@@ -423,8 +263,8 @@ async function runScanner(env, maxStocks) {
   }
 
   results.sort((a, b) => b.score - a.score);
-  const top50 = results.slice(0, 50);
-
+  // 分割実行のため上位N件に絞らず走査した全件を保存する。表示側の上位選別は
+  // handleScanner の order=score.desc&limit=N に委ねる
   const today = new Date().toISOString().split('T')[0];
   const supaUrl = env.SUPABASE_URL;
   const svcKey = env.SUPABASE_SERVICE_KEY;
@@ -438,12 +278,7 @@ async function runScanner(env, maxStocks) {
     'Prefer': 'return=minimal'
   };
 
-  // 今日のデータを削除してから新規挿入
-  await fetch(`${supaUrl}/rest/v1/scan_results?scan_date=eq.${today}`, {
-    method: 'DELETE', headers: svcHeaders
-  });
-
-  const records = top50.map(r => ({
+  const records = results.map(r => ({
     code: r.code, name: r.name, score: r.score, signal: r.signal,
     price: r.price, change_pct: r.change_pct, volume_ratio: r.volume_ratio,
     atr_pct: r.atr_pct, rsi: r.rsi, macd_gc: r.macd_gc,
@@ -451,17 +286,19 @@ async function runScanner(env, maxStocks) {
     gap_pct: r.gap_pct, scan_date: today
   }));
 
+  // upsert: (scan_date, code) にユニーク制約がある前提。事前DELETEは行わない
+  // → INSERT失敗時に当日データが失われたまま残る事故を防ぐ（migrations/001_scan_results_unique.sql 適用が必須）
   const insertRes = await fetch(`${supaUrl}/rest/v1/scan_results`, {
     method: 'POST',
-    headers: { ...svcHeaders, 'Prefer': 'return=minimal' },
+    headers: { ...svcHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify(records)
   });
   if (!insertRes.ok) {
     const errBody = await insertRes.text();
-    throw new Error(`Supabase INSERT失敗: ${insertRes.status} ${errBody}`);
+    throw new Error(`Supabase upsert失敗: ${insertRes.status} ${errBody}（Supabase無料プランが一時停止している可能性があります。ダッシュボードでRestoreしてください）`);
   }
 
-  return { scanned: results.length, saved: top50.length, date: today, market_condition: mc };
+  return { scanned: results.length, saved: records.length, offset, limit: limit ?? null, date: today, market_condition: mc };
 }
 
 // ── SCANNER API HANDLERS ───────────────────────────────────────────────────
@@ -510,21 +347,41 @@ async function handleScanner(request, env, url) {
   }
 }
 
+// トークンをSHA-256ハッシュ化して固定長バイト列で比較する（文字列長・内容のタイミングリークを避ける）
+async function timingSafeEqual(a, b) {
+  const enc = new TextEncoder();
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a || '')),
+    crypto.subtle.digest('SHA-256', enc.encode(b || ''))
+  ]);
+  const va = new Uint8Array(ha), vb = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
+}
+
+// 同一オリジン専用エンドポイント（CORSヘッダを付与しない = クロスオリジンからの読み取りをブラウザが拒否する）
 async function handleScanTrigger(request, env) {
-  if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders() });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 200 });
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), {
-      status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
+      status: 405, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  const token = request.headers.get('X-Admin-Token') || '';
+  if (!env.ADMIN_TOKEN || !(await timingSafeEqual(token, env.ADMIN_TOKEN))) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' }
     });
   }
   try {
-    const result = await runScanner(env, 44);
+    const result = await runScanner(env, { offset: 0, limit: 44 });
     return new Response(JSON.stringify({ ok: true, ...result }), {
-      status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
+      status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' }
     });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
+      status: 500, headers: { 'Content-Type': 'application/json' }
     });
   }
 }
@@ -582,11 +439,15 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    // 81銘柄を1本のcronで走査すると crumb2+market1+銘柄81+upsert1=85 サブリクエストとなり
+    // 無料プランの上限50を超え毎回失敗する。2本のcronに分割し、それぞれ50未満に収める
+    const isSecondHalf = event.cron === '10 23 * * *';
+    const opts = isSecondHalf ? { offset: 40, limit: 41 } : { offset: 0, limit: 40 };
     ctx.waitUntil(
-      runScanner(env).then(r => {
-        console.log('Cron scanner完了:', JSON.stringify(r));
+      runScanner(env, opts).then(r => {
+        console.log(`Cron scanner完了 (${isSecondHalf ? '後半' : '前半'}):`, JSON.stringify(r));
       }).catch(e => {
-        console.error('Cron scanner失敗:', e.message);
+        console.error(`Cron scanner失敗 (${isSecondHalf ? '後半' : '前半'}):`, e.message);
       })
     );
   }

@@ -1,0 +1,57 @@
+name: バックテスト（研究用・手動実行）
+
+# GitHub の Actions タブから手動起動する（iPadのブラウザで完結、CLI不要）。
+# Cloudflare Workersのデプロイ経路には一切関与しない独立ジョブ。
+on:
+  workflow_dispatch:
+    inputs:
+      fee_bps:
+        description: '片道手数料 (bps。5 = 0.05%)'
+        required: false
+        default: '5'
+      slippage_bps:
+        description: '片道スリッページ (bps。10 = 0.10%)'
+        required: false
+        default: '10'
+      tax_pct:
+        description: '譲渡益税率 (%。利益時のみ適用)'
+        required: false
+        default: '20.315'
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '2000'
+
+permissions:
+  contents: write
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: バックテスト実行
+        env:
+          BT_FEE_BPS: ${{ inputs.fee_bps }}
+          BT_SLIPPAGE_BPS: ${{ inputs.slippage_bps }}
+          BT_TAX_PCT: ${{ inputs.tax_pct }}
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+        run: node backtest/run.mjs
+
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: バックテスト結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

@@ -9,6 +9,12 @@
 <title>StockEdge</title>
 <link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+// worker.jsと共有する指標・スコアリングエンジン（indicators.js）を読み込み、
+// 既存の非moduleスクリプト（onclick属性含む）から使えるようwindowへ橋渡しする
+import { calcSMA, calcEMA, calcRSI, calcMACD, calcATR, calcBB, calcStoch, calcTradeScore, buildAdjustedSeries } from '/indicators.js';
+Object.assign(window, { calcSMA, calcEMA, calcRSI, calcMACD, calcATR, calcBB, calcStoch, calcTradeScore, buildAdjustedSeries });
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
 :root{
@@ -235,6 +241,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 /* ── MONITOR ── */
 .monitor-bar{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:none;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);display:flex;align-items:center;gap:8px}
 .monitor-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);animation:pulse 1s infinite;flex-shrink:0}
+.unconfirmed-badge{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);align-items:center;gap:8px}
 
 /* ── LOADING ── */
 .ldg{display:none;position:fixed;inset:0;background:rgba(4,6,15,.93);z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px}
@@ -520,9 +527,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     <div class="qs-tags" id="qsTags"></div>
     <button class="qs-edit-btn" id="qsEditBtn" onclick="toggleQsEdit()">✎ 編集</button>
   </div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt3);cursor:pointer;margin-top:8px">
+    <input type="checkbox" id="includeUnconfirmedChk" style="margin:0">
+    未確定足を含む（場中データも使用してスコア計算する）
+  </label>
 </div>
 
 <div class="errmsg" id="errmsg"></div>
+<div class="unconfirmed-badge" id="unconfirmedBadge" style="display:none">⚠ 未確定足を含んで分析しています（場中はスコアが変動します）</div>
 
 <!-- PRICE SUMMARY BAR -->
 <div class="psbar" id="psbar">
@@ -837,6 +849,8 @@ function hideErr(){document.getElementById('errmsg').style.display='none';}
 function show(id){var el=document.getElementById(id);if(el)el.style.display='block';}
 function fmt(v,d){return v!=null&&!isNaN(v)?Number(v).toLocaleString('ja-JP',{maximumFractionDigits:d||0}):'--';}
 function fmtB(v){if(v==null||isNaN(v))return '--';var a=Math.abs(v);if(a>=1e12)return (v/1e12).toFixed(2)+'兆';if(a>=1e8)return (v/1e8).toFixed(1)+'億';if(a>=1e4)return (v/1e4).toFixed(1)+'万';return v.toLocaleString();}
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function safeHref(u){try{var p=new URL(u,location.href);if(p.protocol==='http:'||p.protocol==='https:')return p.href;}catch(e){}return '#';}
 
 // ── MONITOR / NOTIFICATION ──────────────────────
 var monitorTimer=null, monitorCode='', monitorInterval='1d', lastSignal='';
@@ -896,131 +910,14 @@ function sendNotification(code,sig,score,price){
   }
 }
 
-// ── TRADE SCORE ENGINE (0〜100点) ──────────────
-function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
-  var last=closes.length-1;
-  var cur=closes[last];
-  var score=50; // base
-  var details=[];
-  function add(name,pts,d,icon){
-    score+=pts;
-    details.push({name:name,pts:pts,d:d,icon:icon||'●'});
-  }
-
-  // ① 出来高前日比
-  if(last>=1&&volumes[last-1]>0){
-    var volPrev=volumes[last-1],volCur=volumes[last];
-    var volRatio=volCur/volPrev;
-    var volPct=((volRatio-1)*100).toFixed(0);
-    if(volRatio>=3)    add('出来高',+20,'前日比+'+(volRatio.toFixed(1))+'x — 急騰シグナル！','🔥');
-    else if(volRatio>=2.5) add('出来高',+15,'前日比+'+volPct+'% — 大幅増加','📊');
-    else if(volRatio>=2)   add('出来高',+10,'前日比+'+volPct+'% — 増加','📊');
-    else if(volRatio<=0.5) add('出来高',-10,'前日比'+volPct+'% — 閑散相場','📉');
-    else                   add('出来高',0,'前日比'+(volRatio>=1?'+':'')+volPct+'%','📊');
-  }
-
-  // ② EMA20/50/200トレンド配列
-  var ema20=calcEMA(closes,20),ema50=calcEMA(closes,50),ema200=calcEMA(closes,Math.min(200,closes.length));
-  var e20=ema20[last],e50=ema50[last],e200=ema200[last];
-  if(e20&&e50&&e200&&e20>e50&&e50>e200){
-    add('EMA配列',+15,'EMA20>50>200 完全上昇配列','📐');
-  } else if(e20&&e50&&e200&&e20<e50&&e50<e200){
-    add('EMA配列',-10,'EMA20<50<200 下降配列','📐');
-  } else if(e20&&e50&&e20>e50){
-    add('EMA配列',+8,'EMA20>50 上昇傾向','📐');
-  } else if(e20&&e50&&e20<e50){
-    add('EMA配列',-5,'EMA20<50 下降傾向','📐');
-  } else {
-    add('EMA配列',0,'EMA配列 データ不足','📐');
-  }
-
-  // ③ RSI
-  var rsiArr=calcRSI(closes,14);
-  var rsi=rsiArr[last]||50;
-  if(rsi>=50&&rsi<=65)       add('RSI',+10,'RSI='+rsi.toFixed(1)+' 理想的な強気域(50-65)','📊');
-  else if(rsi>65&&rsi<=70)   add('RSI',+3,'RSI='+rsi.toFixed(1)+' やや過熱気味','📊');
-  else if(rsi>70)             add('RSI',-10,'RSI='+rsi.toFixed(1)+' 買われすぎ — 反落注意','📊');
-  else if(rsi<30)             add('RSI',+5,'RSI='+rsi.toFixed(1)+' 売られすぎ — 反発期待','📊');
-  else if(rsi>=30&&rsi<50)   add('RSI',-3,'RSI='+rsi.toFixed(1)+' 弱気域','📊');
-
-  // ④ MACD GC/DC
-  var macdObj=calcMACD(closes);
-  var hist=macdObj.hist[last]||0,histPrev=macdObj.hist[last-1]||0;
-  var isGC=hist>0&&histPrev<=0,isDC=hist<0&&histPrev>=0;
-  if(isGC)            add('MACD',+10,'ゴールデンクロス発生！','📈');
-  else if(isDC)       add('MACD',-10,'デッドクロス発生！','📉');
-  else if(hist>0&&hist>histPrev) add('MACD',+7,'ヒストグラム拡大 上昇加速','📈');
-  else if(hist>0)     add('MACD',+5,'MACDプラス圏 上昇継続','📈');
-  else if(hist<0&&hist<histPrev) add('MACD',-7,'ヒストグラム拡大 下落加速','📉');
-  else                add('MACD',-5,'MACDマイナス圏 下落継続','📉');
-
-  // ⑤ ATRボラティリティ
-  var atrVal=calcATR(highs,lows,closes,14);
-  var atrPct=cur>0?atrVal/cur*100:2;
-  if(atrPct>=5)       add('ATRボラ',-10,'ATR='+atrPct.toFixed(2)+'% 過熱 — リスク大','⚡');
-  else if(atrPct>=3)  add('ATRボラ',-5,'ATR='+atrPct.toFixed(2)+'% やや高め — 注意','⚡');
-  else                add('ATRボラ',0,'ATR='+atrPct.toFixed(2)+'% 安定範囲','⚡');
-
-  // ⑥ ギャップ率（始値 vs 前日終値）
-  if(opens&&opens[last]&&last>=1&&closes[last-1]>0){
-    var gapPct=(opens[last]-closes[last-1])/closes[last-1]*100;
-    if(gapPct>=3&&gapPct<=8)  add('GU/GD',+10,'GU=+'+gapPct.toFixed(1)+'% 理想的ギャップアップ','🎯');
-    else if(gapPct>1)          add('GU/GD',+5,'GU=+'+gapPct.toFixed(1)+'%','🎯');
-    else if(gapPct>8)          add('GU/GD',0,'GU=+'+gapPct.toFixed(1)+'% 過度なGU','🎯');
-    else if(gapPct<-3)         add('GU/GD',-10,'GD='+gapPct.toFixed(1)+'% ギャップダウン','🎯');
-    else                       add('GU/GD',0,'ギャップ='+gapPct.toFixed(1)+'%','🎯');
-  }
-
-  // ⑦ 年初来高値（52週高値）
-  var nBars=Math.min(252,highs.length);
-  var high52=Math.max.apply(null,highs.slice(-nBars));
-  if(cur>=high52*0.995)        add('52W高値',+10,'52週高値更新中！ 強モメンタム','🏆');
-  else if(cur>=high52*0.97)    add('52W高値',+5,'52週高値の3%圏内 ブレイク候補','🏆');
-  else                         add('52W高値',0,'高値から'+((1-cur/high52)*100).toFixed(1)+'%下','🏆');
-
-  // ⑧ 材料・決算・アナリスト
-  if(summaryData){
-    var cal=summaryData.calendarEvents||{};
-    var earArr=cal.earnings&&cal.earnings.earningsDate;
-    var nextEar=earArr&&earArr[0]&&earArr[0].raw;
-    var now=Date.now()/1000;
-    if(nextEar){
-      var daysEar=Math.ceil((nextEar-now)/86400);
-      if(daysEar>=0&&daysEar<=7)      add('材料',+15,'決算まで'+daysEar+'日 — カタリスト大！','📅');
-      else if(daysEar>=0&&daysEar<=30) add('材料',+5,'決算まで'+daysEar+'日','📅');
-    }
-    var fd=summaryData.financialData||{};
-    var recKey=fd.recommendationKey||'';
-    if(recKey==='strong_buy')  add('アナリスト',+8,'コンセンサス: STRONG BUY','👨‍💼');
-    else if(recKey==='buy')    add('アナリスト',+4,'コンセンサス: BUY','👨‍💼');
-    else if(recKey==='sell')   add('アナリスト',-4,'コンセンサス: SELL','👨‍💼');
-    else if(recKey==='strong_sell') add('アナリスト',-8,'コンセンサス: STRONG SELL','👨‍💼');
-  }
-
-  // クランプ
-  score=Math.max(0,Math.min(100,score));
-
-  // シグナル判定
-  var signal,signalClass,signalIcon,signalJa;
-  if(score>=90){signal='STRONG BUY';signalClass='strong-buy';signalIcon='🚀';signalJa='強い買い';}
-  else if(score>=75){signal='BUY';signalClass='buy';signalIcon='📈';signalJa='買い';}
-  else if(score>=50){signal='NEUTRAL';signalClass='neutral';signalIcon='⚖️';signalJa='中立';}
-  else if(score>=30){signal='SELL';signalClass='sell';signalIcon='📉';signalJa='売り';}
-  else{signal='STRONG SELL';signalClass='strong-sell';signalIcon='⬇️';signalJa='強い売り';}
-
-  // vClass: signalClassと整合させる
-  var vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
-
-  return{score,signal,signalClass,signalIcon,signalJa,details,vClass,rsi,hist,isGC,isDC,atrPct,e20,e50,e200};
-}
-
+// ── TRADE SCORE ENGINE ── indicators.js (共有モジュール) の calcTradeScore を使用。ローカル実装は削除済み
 // ── YAHOO FINANCE API ──────────────────────────
 var RANGE_MAP={'1m':'1d','5m':'5d','15m':'5d','30m':'1mo','1h':'3mo','1d':'1y','1wk':'2y'};
 
 async function fetchYahooChart(code,interval){
   var sym=code+'.T';
   var range=RANGE_MAP[interval]||'1y';
-  var url='/yfin/v8/finance/chart/'+sym+'?interval='+interval+'&range='+range+'&includePrePost=false&_t='+Date.now();
+  var url='/yfin/v8/finance/chart/'+sym+'?interval='+interval+'&range='+range+'&includePrePost=false&includeAdjustedClose=true&_t='+Date.now();
   var r=await fetch(url);
   if(!r.ok)throw new Error('HTTP '+r.status);
   var j=await r.json();
@@ -1078,27 +975,76 @@ async function fetchTimeframeSignal(code,interval){
     var cr=await fetchYahooChart(code,interval);
     var d=processChartData(cr,interval);
     if(d.closes.length<60)return null;
-    var t=calcTradeScore(d.opens,d.highs,d.lows,d.closes,d.volumes,null,interval);
+    var t=calcTradeScore(d.adjOpens,d.adjHighs,d.adjLows,d.adjCloses,d.volumes,null,interval);
     return{interval:interval,score:t.score,signalClass:t.signalClass,signal:t.signal,signalJa:t.signalJa};
   }catch(e){return null;}
 }
 
-function processChartData(result, interval){
+// 未確定足（現在進行中でまだ終わっていない足）の判定
+// 日足の例: regularMarketTime が当日かつ市場時間内なら、当日の足はまだ確定していない
+function isLastBarUnconfirmed(meta,timestamps,interval){
+  if(!timestamps||!timestamps.length)return false;
+  var lastTs=timestamps[timestamps.length-1];
+  var now=meta.regularMarketTime||Math.floor(Date.now()/1000);
+  var barSec={'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600}[interval];
+  if(barSec){
+    // 分足・時間足: そのバーの期間がまだ終わっていなければ未確定
+    return (lastTs+barSec)>now;
+  }
+  var ctp=meta.currentTradingPeriod&&meta.currentTradingPeriod.regular;
+  if(interval==='1d'){
+    var sameSession=Math.abs(now-lastTs)<36*3600;
+    if(ctp)return sameSession&&now>=ctp.start&&now<ctp.end;
+    var d=new Date(now*1000);
+    var jstHour=(d.getUTCHours()+9)%24;
+    var sameCalDay=Math.floor(now/86400)===Math.floor(lastTs/86400);
+    return sameCalDay&&jstHour>=9&&jstHour<15;
+  }
+  if(interval==='1wk'){
+    var withinWeek=(now-lastTs)<6*86400;
+    if(!withinWeek)return false;
+    return ctp?now<ctp.end:true;
+  }
+  return false;
+}
+
+function processChartData(result, interval, includeUnconfirmed){
+  includeUnconfirmed=!!includeUnconfirmed;
   var meta=result.meta||{};
   var timestamps=result.timestamp||[];
   var q=result.indicators&&result.indicators.quote&&result.indicators.quote[0]||{};
+  var adjArr=result.indicators&&result.indicators.adjclose&&result.indicators.adjclose[0]&&result.indicators.adjclose[0].adjclose||null;
+  var lastTsOrig=timestamps.length?timestamps[timestamps.length-1]:null;
+  var unconfirmed=isLastBarUnconfirmed(meta,timestamps,interval);
   var raw=timestamps.map(function(t,i){
-    return{t:t,o:q.open&&q.open[i],h:q.high&&q.high[i],l:q.low&&q.low[i],c:q.close&&q.close[i],v:q.volume&&q.volume[i]};
+    return{t:t,o:q.open&&q.open[i],h:q.high&&q.high[i],l:q.low&&q.low[i],c:q.close&&q.close[i],v:q.volume&&q.volume[i],
+           adjc:adjArr&&adjArr[i]};
   }).filter(function(r){return r.c!=null&&!isNaN(r.c)&&r.c>0;});
+  // 既定は確定足のみでスコア計算する。未確定足を含めるのはユーザーがトグルした場合のみ
+  if(unconfirmed&&!includeUnconfirmed&&raw.length&&raw[raw.length-1].t===lastTsOrig){
+    raw.pop();
+  }
   if(raw.length<10)throw new Error('データ不足('+interval+'): '+raw.length+'件 — この時間軸はデータが少ない可能性があります');
   var isIntra=['1m','5m','15m','30m','1h'].indexOf(interval)>=0;
+  // 指標計算（スコア）には分割・配当調整後の系列を使う。画面表示の価格・ローソク足は
+  // 未調整の実際の株価（証券会社アプリの値と一致させるため）のまま据え置く
+  var adjRatios=raw.map(function(r){
+    var adjc=(r.adjc!=null&&!isNaN(r.adjc))?r.adjc:r.c;
+    return r.c>0?adjc/r.c:1;
+  });
   return{
     meta:meta,
+    unconfirmed:unconfirmed,
+    includedUnconfirmed:unconfirmed&&includeUnconfirmed,
     opens:raw.map(function(r){return r.o||r.c;}),
     highs:raw.map(function(r){return r.h||r.c;}),
     lows:raw.map(function(r){return r.l||r.c;}),
     closes:raw.map(function(r){return r.c;}),
     volumes:raw.map(function(r){return r.v||0;}),
+    adjOpens:raw.map(function(r,i){return (r.o||r.c)*adjRatios[i];}),
+    adjHighs:raw.map(function(r,i){return (r.h||r.c)*adjRatios[i];}),
+    adjLows:raw.map(function(r,i){return (r.l||r.c)*adjRatios[i];}),
+    adjCloses:raw.map(function(r,i){return r.c*adjRatios[i];}),
     dates:raw.map(function(r){
       var d=new Date(r.t*1000);
       if(isIntra){
@@ -1142,12 +1088,16 @@ async function analyze(){
 
   try{
     var interval=document.getElementById('isel').value;
+    var includeUnconfirmed=document.getElementById('includeUnconfirmedChk')&&document.getElementById('includeUnconfirmedChk').checked;
 
     // 1. チャートデータ取得
     setLdg('株価データ取得中...','Yahoo Finance: '+code+'.T');
     var chartResult=await fetchYahooChart(code,interval);
-    var cd=processChartData(chartResult, interval);
+    var cd=processChartData(chartResult, interval, includeUnconfirmed);
     var opens=cd.opens,highs=cd.highs,lows=cd.lows,closes=cd.closes,volumes=cd.volumes,dates=cd.dates,meta=cd.meta;
+    var adjOpens=cd.adjOpens,adjHighs=cd.adjHighs,adjLows=cd.adjLows,adjCloses=cd.adjCloses;
+    var unconfirmedBadgeEl=document.getElementById('unconfirmedBadge');
+    if(unconfirmedBadgeEl)unconfirmedBadgeEl.style.display=cd.includedUnconfirmed?'flex':'none';
     var stockName=meta.shortName||meta.longName||(code+'（日本株）');
     var last=closes.length-1;
     var cur=closes[last],prev=closes[last-1];
@@ -1178,8 +1128,9 @@ async function analyze(){
     var bbU=bb.upper[last],bbL=bb.lower[last],bbM=bb.sma[last];
     var bbPos=bbU&&bbL?Math.max(0,Math.min(100,(cur-bbL)/(bbU-bbL)*100)):50;
     var stoch=calcStoch(highs,lows,closes,14,3,3);
-    var atr=calcATR(highs,lows,closes,14);
-    var atrPct=atr/cur*100;
+    var atrArr=calcATR(highs,lows,closes,14);
+    var atr=atrArr[last]||0;
+    var atrPct=cur>0?atr/cur*100:0;
     var sma5=calcSMA(closes,5),sma25=calcSMA(closes,25),sma75=calcSMA(closes,Math.min(75,closes.length-1));
     var ema9=calcEMA(closes,9);
     var sma5v=sma5[last],sma25v=sma25[last],sma75v=sma75[last],ema9v=ema9[last];
@@ -1346,14 +1297,14 @@ async function analyze(){
       }
     });
 
-    // ── NEW TRADE SCORE ENGINE ──
-    var ts=calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval);
+    // ── NEW TRADE SCORE ENGINE ── 分割・配当調整後の系列でスコア計算する（表示価格は未調整のまま）
+    var ts=calcTradeScore(adjOpens,adjHighs,adjLows,adjCloses,volumes,summaryData,interval);
     var score=ts.score;
     var vClass=ts.vClass;
     var signalClass=ts.signalClass;
 
-    // ── 地合いフィルター適用 ──
-    if(!isIntraday&&mc.adj!==0){
+    // ── 地合いフィルター適用 ── 決算veto中（後述）は中立表示を維持するためスキップする
+    if(!isIntraday&&mc.adj!==0&&!ts.earningsVeto.active){
       ts.details.push({name:'地合いフィルター',pts:mc.adj,d:'日経225 '+mc.level+(mc.n225?' ('+mc.n225.toLocaleString()+'pt)':'')+' — 地合い調整',icon:'🇯🇵'});
       score=Math.max(0,Math.min(100,score+mc.adj));
       if(score>=90){signalClass='strong-buy';ts.signal='STRONG BUY';ts.signalIcon='🚀';ts.signalJa='強い買い';}
@@ -1364,21 +1315,10 @@ async function analyze(){
       vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
     }
 
-    // ── 決算3日前シグナル除外 ──
-    var daysToEarnings=null;
-    if(!isIntraday&&summaryData){
-      var calEx=summaryData.calendarEvents||{};
-      var earArrEx=calEx.earnings&&calEx.earnings.earningsDate;
-      var nextEarEx=earArrEx&&earArrEx[0]&&earArrEx[0].raw;
-      if(nextEarEx){
-        daysToEarnings=Math.ceil((nextEarEx-Date.now()/1000)/86400);
-        if(daysToEarnings>=0&&daysToEarnings<=3){
-          signalClass='neutral';ts.signal='NEUTRAL';ts.signalIcon='⏸️';ts.signalJa='決算前(様子見)';
-          vClass='hold';
-          ts.details.push({name:'決算リスク',pts:0,d:'決算まで'+daysToEarnings+'日 — シグナル除外（イベントリスク回避）','icon':'📅'});
-        }
-      }
-    }
+    // 決算接近時の拒否権（veto）はcalcTradeScore内で一元判定済み（0〜7日、スコア自体を中立化する）。
+    // ここでの独自の3日判定・ラベルのみ書き換えは廃止し、ts.earningsVetoをそのまま使う
+    if(ts.earningsVeto.active){ signalClass='neutral'; vClass='hold'; }
+    var daysToEarnings=ts.earningsVeto.active?ts.earningsVeto.days:null;
 
     // 直近分析のシグナルを保持（取引記録の紐付け用）
     _lastAnalysis={code:code,signal:ts.signal,signalClass:signalClass,score:score};
@@ -1433,8 +1373,8 @@ async function analyze(){
     signalBadge.className='signal-badge '+signalClass;
     document.getElementById('vtxt').textContent=ts.signalJa+' ('+stockName+')';
     var subTexts={'strong-buy':'全条件揃い — 最高のエントリー機会','buy':'上昇トレンド継続中 — 買いエントリー検討','neutral':'明確な方向性なし — 様子見推奨','sell':'下落トレンド — 売り/ショート検討','strong-sell':'全指標悪化 — ポジション回避'};
-    var subTxt=(daysToEarnings!=null&&daysToEarnings>=0&&daysToEarnings<=3)
-      ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためシグナル除外'
+    var subTxt=(daysToEarnings!=null)
+      ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためスコアを中立表示にしています'
       :(subTexts[signalClass]||'');
     document.getElementById('vsub').textContent=subTxt+'  |  スコア: '+score.toFixed(0)+'/100';
     // 地合いバッジ
@@ -1708,10 +1648,10 @@ function renderNews(news,code){
     var tag='',cls='neu';
     if(tl.match(/上昇|急騰|最高|買い|増益|黒字|好調|強気|上方/)){tag='ポジティブ';cls='pos';}
     else if(tl.match(/下落|急落|最安|売り|減益|赤字|不振|弱気|下方|懸念/)){tag='ネガティブ';cls='neg';}
-    return '<a class="news-item" href="'+url+'" target="_blank" rel="noopener">'+
-      '<div class="news-title">'+title+'</div>'+
-      '<div class="news-meta"><span class="news-src">'+src+'</span>'+
-      (timeStr?'<span class="news-time">'+timeStr+'</span>':'')+
+    return '<a class="news-item" href="'+safeHref(url)+'" target="_blank" rel="noopener">'+
+      '<div class="news-title">'+escHtml(title)+'</div>'+
+      '<div class="news-meta"><span class="news-src">'+escHtml(src)+'</span>'+
+      (timeStr?'<span class="news-time">'+escHtml(timeStr)+'</span>':'')+
       (tag?'<span class="news-tag '+cls+'">'+tag+'</span>':'')+
       '</div></a>';
   }).join('');
@@ -2085,58 +2025,7 @@ document.getElementById('sinput').addEventListener('keydown',function(e){if(e.ke
 // ============================================================
 // TECHNICAL CALCULATIONS
 // ============================================================
-function calcSMA(arr,p){
-  return arr.map((_,i)=>i<p-1?null:arr.slice(i-p+1,i+1).reduce((a,b)=>a+b,0)/p);
-}
-function calcEMA(arr,p){
-  const k=2/(p+1);let e=null;
-  return arr.map((v,i)=>{
-    if(!v){return null}
-    if(e===null){if(i<p-1)return null;e=arr.slice(0,p).reduce((a,b)=>a+b,0)/p;}
-    else e=v*k+e*(1-k);
-    return e;
-  });
-}
-function calcRSI(c,p=14){
-  const g=[],l=[];
-  for(let i=1;i<c.length;i++){const d=c[i]-c[i-1];g.push(d>0?d:0);l.push(d<0?-d:0);}
-  const r=[null];
-  let ag=g.slice(0,p).reduce((a,b)=>a+b,0)/p;
-  let al=l.slice(0,p).reduce((a,b)=>a+b,0)/p;
-  for(let i=p;i<g.length;i++){
-    ag=(ag*(p-1)+g[i])/p;al=(al*(p-1)+l[i])/p;
-    r.push(al===0?100:100-100/(1+ag/al));
-  }
-  while(r.length<p)r.unshift(null);
-  return r;
-}
-function calcMACD(c){
-  const e12=calcEMA(c,12),e26=calcEMA(c,26);
-  const ml=e12.map((v,i)=>v&&e26[i]?v-e26[i]:null);
-  const sig=calcEMA(ml.filter(v=>v!==null),9);
-  let si=0;
-  const sf=ml.map(v=>{if(v===null)return null;return sig[si++]??null;});
-  return{macd:ml,signal:sf,hist:ml.map((v,i)=>v&&sf[i]?v-sf[i]:null)};
-}
-function calcBB(c,p=20,k=2){
-  const sma=calcSMA(c,p);
-  return{
-    sma,
-    upper:sma.map((m,i)=>{if(!m)return null;const s=c.slice(i-p+1,i+1);const sd=Math.sqrt(s.reduce((a,b)=>a+(b-m)**2,0)/p);return m+k*sd;}),
-    lower:sma.map((m,i)=>{if(!m)return null;const s=c.slice(i-p+1,i+1);const sd=Math.sqrt(s.reduce((a,b)=>a+(b-m)**2,0)/p);return m-k*sd;}),
-  };
-}
-function calcStoch(hi,lo,cl,p=14,sk=3,sd=3){
-  const rk=cl.map((_,i)=>{if(i<p-1)return null;const hh=Math.max(...hi.slice(i-p+1,i+1)),ll=Math.min(...lo.slice(i-p+1,i+1));return hh===ll?50:(cl[i]-ll)/(hh-ll)*100;});
-  const kv=calcSMA(rk.filter(v=>v!==null),sk);
-  const dv=calcSMA(kv.filter(v=>v!==null),sd);
-  return{k:kv[kv.length-1]??50,d:dv[dv.length-1]??50};
-}
-function calcATR(hi,lo,cl,p=14){
-  const tr=[];for(let i=1;i<cl.length;i++)tr.push(Math.max(hi[i]-lo[i],Math.abs(hi[i]-cl[i-1]),Math.abs(lo[i]-cl[i-1])));
-  return tr.length>=p?tr.slice(-p).reduce((a,b)=>a+b,0)/p:tr[tr.length-1]||0;
-}
-
+// SMA/EMA/RSI/MACD/BB/Stoch/ATR は indicators.js（共有モジュール、window.*に橋渡し済み）を使用。ローカル実装は削除済み
 function calcIchimoku(hi,lo,cl){
   var n=cl.length;
   var tenkan=hi.map(function(_,i){
@@ -3163,17 +3052,37 @@ function showToastMsg(msg) {
   setTimeout(function(){ el.style.display='none'; el.className=prev||'errmsg'; }, 3000);
 }
 
+// 管理者トークン: サーバー(env.ADMIN_TOKEN)と照合するためこの端末のlocalStorageにのみ保存する。
+// HTML/JSソース自体にはトークン値を一切埋め込まない（初回に入力を求める）
+var ADMIN_TOKEN_KEY = 'kabu_admin_token';
+function getAdminToken(promptIfMissing) {
+  var t = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!t && promptIfMissing) {
+    t = window.prompt('管理者トークンを入力してください（この端末にのみ保存されます）') || '';
+    if (t) localStorage.setItem(ADMIN_TOKEN_KEY, t);
+  }
+  return t || '';
+}
+
 function triggerScan() {
   var btn = document.getElementById('scanTriggerBtn');
   var icon = document.getElementById('scanTriggerIcon');
   var txt = document.getElementById('scanTriggerTxt');
   if (!btn || btn.disabled) return;
+  var adminToken = getAdminToken(true);
+  if (!adminToken) return;
   btn.disabled = true;
   icon.textContent = '⏳';
   txt.textContent = 'スキャン中...';
 
-  fetch('/api/scan-trigger', { method: 'POST' })
-    .then(function(r){ return r.json(); })
+  fetch('/api/scan-trigger', { method: 'POST', headers: { 'X-Admin-Token': adminToken } })
+    .then(function(r){
+      if (r.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        throw new Error('認証失敗 — トークンが正しくありません（次回再入力してください）');
+      }
+      return r.json();
+    })
     .then(function(data) {
       if (data.ok) {
         icon.textContent = '✓';

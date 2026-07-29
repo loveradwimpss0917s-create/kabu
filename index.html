@@ -301,6 +301,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .tj-fab{position:fixed;bottom:80px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#664400,#cc8800);border:1px solid var(--gold);color:#fff;font-size:22px;cursor:pointer;box-shadow:0 4px 24px rgba(245,181,53,.3);z-index:50;display:flex;align-items:center;justify-content:center}
 .tj-panel{position:fixed;inset:0;background:rgba(4,6,15,.97);z-index:150;display:none;flex-direction:column}
 .tj-panel.show{display:flex}
+.bt-fab{position:fixed;bottom:140px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#4a0080,#8c52ff);border:1px solid var(--purple);color:#fff;font-size:22px;cursor:pointer;box-shadow:0 4px 24px rgba(140,82,255,.3);z-index:50;display:flex;align-items:center;justify-content:center}
+.bt-btn{background:var(--bg2);border:1px solid rgba(140,82,255,.4);color:#fff;border-radius:8px;padding:10px 14px;font-size:12px;font-family:'JetBrains Mono',monospace;cursor:pointer;margin:0 8px 8px 0}
+.bt-btn:active{background:rgba(140,82,255,.2)}
+.bt-status{font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--txt2);background:var(--bg2);border-radius:8px;padding:10px 14px;margin-bottom:12px;white-space:pre-wrap;line-height:1.6}
+.bt-report{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--txt2);background:var(--bg2);border-radius:8px;padding:12px 14px;white-space:pre-wrap;line-height:1.5;overflow-x:auto}
 .tj-header{display:flex;align-items:center;padding:16px;border-bottom:1px solid var(--bdr);gap:10px;flex-shrink:0}
 .tj-title{font-family:'Orbitron',monospace;font-size:14px;letter-spacing:3px;color:var(--gold);flex:1}
 .tj-close{background:none;border:1px solid var(--bdr);border-radius:6px;color:var(--txt2);padding:6px 14px;cursor:pointer;font-size:12px}
@@ -726,6 +731,29 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 
 <!-- TRADE JOURNAL FAB -->
 <button class="tj-fab" onclick="openTradeJournal()" title="取引履歴">📓</button>
+
+<!-- BACKTEST FAB -->
+<button class="bt-fab" onclick="openBacktest()" title="バックテスト">🧪</button>
+
+<!-- BACKTEST PANEL -->
+<div class="wl-panel" id="btPanel">
+  <div class="wl-header">
+    <div class="wl-title">BACKTEST（研究用）</div>
+    <button class="wl-close" onclick="closeBacktest()">✕ 閉じる</button>
+  </div>
+  <div class="wl-body">
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:12px;line-height:1.6">
+      過去3年の日足でcalcTradeScoreを日次シミュレーションし、スコア帯別の将来リターン・勝率・市場対比を集計します。<br>
+      81銘柄×3年分のため1回では完了せず、2分おきのcronで少しずつ進みます（「1チャンク進める」で手動でも進められます）。
+    </div>
+    <button class="bt-btn" onclick="btStart()">▶ 新規ジョブ開始</button>
+    <button class="bt-btn" onclick="btAdvance()">⏩ 1チャンク進める</button>
+    <button class="bt-btn" onclick="btStatus()">🔄 進捗確認</button>
+    <button class="bt-btn" onclick="btReport()">📊 レポート表示</button>
+    <div class="bt-status" id="btStatusBox">（進捗確認を押してください）</div>
+    <div class="bt-report" id="btReportBox"></div>
+  </div>
+</div>
 
 <!-- TRADE JOURNAL PANEL -->
 <div class="tj-panel" id="tjPanel">
@@ -3060,6 +3088,66 @@ function getAdminToken(promptIfMissing) {
     if (t) localStorage.setItem(ADMIN_TOKEN_KEY, t);
   }
   return t || '';
+}
+
+// ── BACKTEST（研究用パネル） ──────────────────────────
+function openBacktest(){
+  document.getElementById('btPanel').classList.add('show');
+  btStatus();
+}
+function closeBacktest(){ document.getElementById('btPanel').classList.remove('show'); }
+
+function btAuthedPost(path){
+  var token = getAdminToken(true);
+  if (!token) return Promise.reject(new Error('トークンが未入力です'));
+  return fetch(path, { method: 'POST', headers: { 'X-Admin-Token': token } }).then(function(r){
+    if (r.status === 401) {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      throw new Error('認証失敗 — トークンが正しくありません（次回再入力してください）');
+    }
+    return r.json();
+  });
+}
+
+function btRenderStatus(data){
+  var box = document.getElementById('btStatusBox');
+  var job = data && data.job;
+  if (!job) { box.textContent = 'ジョブがありません。「新規ジョブ開始」で開始してください。'; return; }
+  var pct = job.total_stocks ? Math.round(job.cursor / job.total_stocks * 100) : 0;
+  box.textContent =
+    'job_id: ' + job.id + '\n' +
+    'status: ' + job.status + '\n' +
+    '進捗: ' + job.cursor + ' / ' + job.total_stocks + ' 銘柄 (' + pct + '%) — 現銘柄内 day_cursor=' + job.day_cursor + '\n' +
+    '更新: ' + job.updated_at;
+}
+
+function btStart(){
+  if (!window.confirm('新しいバックテストジョブを開始しますか？（既存ジョブとは別に作成されます）')) return;
+  btAuthedPost('/api/backtest-start').then(function(data){
+    document.getElementById('btStatusBox').textContent = 'ジョブを開始しました: job_id=' + (data.job && data.job.id);
+    showSuccessMsg && showSuccessMsg('バックテストジョブを開始しました');
+  }).catch(function(e){ alert('開始失敗: ' + e.message); });
+}
+
+function btAdvance(){
+  document.getElementById('btStatusBox').textContent = '実行中...';
+  btAuthedPost('/api/backtest-trigger').then(function(data){
+    document.getElementById('btStatusBox').textContent = JSON.stringify(data, null, 2);
+  }).catch(function(e){ alert('実行失敗: ' + e.message); });
+}
+
+function btStatus(){
+  fetch('/api/backtest-status').then(function(r){ return r.json(); }).then(btRenderStatus).catch(function(e){
+    document.getElementById('btStatusBox').textContent = '取得失敗: ' + e.message;
+  });
+}
+
+function btReport(){
+  var box = document.getElementById('btReportBox');
+  box.textContent = 'レポート集計中...';
+  fetch('/api/backtest-report').then(function(r){ return r.json(); }).then(function(data){
+    box.textContent = JSON.stringify(data, null, 2);
+  }).catch(function(e){ box.textContent = '取得失敗: ' + e.message; });
 }
 
 function triggerScan() {

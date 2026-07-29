@@ -8,7 +8,9 @@ directory = "."
 binding = "ASSETS"
 
 [triggers]
-crons = ["0 23 * * *"]
+# "0 23 * * *": 日次スキャナー（毎日23:00 UTC = 8:00 JST）
+# "*/2 * * * *": バックテストのチャンク継続実行（実行中ジョブが無ければ何もしない）
+crons = ["0 23 * * *", "*/2 * * * *"]
 
 [vars]
 SUPABASE_URL = "https://fhpwmafnbzmtjemldmcy.supabase.co"

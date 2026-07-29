@@ -235,6 +235,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 /* ── MONITOR ── */
 .monitor-bar{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:none;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);display:flex;align-items:center;gap:8px}
 .monitor-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);animation:pulse 1s infinite;flex-shrink:0}
+.unconfirmed-badge{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);align-items:center;gap:8px}
 
 /* ── LOADING ── */
 .ldg{display:none;position:fixed;inset:0;background:rgba(4,6,15,.93);z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px}
@@ -520,9 +521,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     <div class="qs-tags" id="qsTags"></div>
     <button class="qs-edit-btn" id="qsEditBtn" onclick="toggleQsEdit()">✎ 編集</button>
   </div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt3);cursor:pointer;margin-top:8px">
+    <input type="checkbox" id="includeUnconfirmedChk" style="margin:0">
+    未確定足を含む（場中データも使用してスコア計算する）
+  </label>
 </div>
 
 <div class="errmsg" id="errmsg"></div>
+<div class="unconfirmed-badge" id="unconfirmedBadge" style="display:none">⚠ 未確定足を含んで分析しています（場中はスコアが変動します）</div>
 
 <!-- PRICE SUMMARY BAR -->
 <div class="psbar" id="psbar">
@@ -837,6 +843,8 @@ function hideErr(){document.getElementById('errmsg').style.display='none';}
 function show(id){var el=document.getElementById(id);if(el)el.style.display='block';}
 function fmt(v,d){return v!=null&&!isNaN(v)?Number(v).toLocaleString('ja-JP',{maximumFractionDigits:d||0}):'--';}
 function fmtB(v){if(v==null||isNaN(v))return '--';var a=Math.abs(v);if(a>=1e12)return (v/1e12).toFixed(2)+'兆';if(a>=1e8)return (v/1e8).toFixed(1)+'億';if(a>=1e4)return (v/1e4).toFixed(1)+'万';return v.toLocaleString();}
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function safeHref(u){try{var p=new URL(u,location.href);if(p.protocol==='http:'||p.protocol==='https:')return p.href;}catch(e){}return '#';}
 
 // ── MONITOR / NOTIFICATION ──────────────────────
 var monitorTimer=null, monitorCode='', monitorInterval='1d', lastSignal='';
@@ -944,15 +952,24 @@ function calcTradeScore(opens,highs,lows,closes,volumes,summaryData,interval){
   else if(rsi>=30&&rsi<50)   add('RSI',-3,'RSI='+rsi.toFixed(1)+' 弱気域','📊');
 
   // ④ MACD GC/DC
+  // hist[last-1] が null/undefined/NaN の場合 ||0 で0扱いすると偽のGC/DCが成立するため、
+  // 明示的に有効値チェックし、無効なら加点0でGC/DC判定自体をスキップする
   var macdObj=calcMACD(closes);
-  var hist=macdObj.hist[last]||0,histPrev=macdObj.hist[last-1]||0;
-  var isGC=hist>0&&histPrev<=0,isDC=hist<0&&histPrev>=0;
-  if(isGC)            add('MACD',+10,'ゴールデンクロス発生！','📈');
-  else if(isDC)       add('MACD',-10,'デッドクロス発生！','📉');
-  else if(hist>0&&hist>histPrev) add('MACD',+7,'ヒストグラム拡大 上昇加速','📈');
-  else if(hist>0)     add('MACD',+5,'MACDプラス圏 上昇継続','📈');
-  else if(hist<0&&hist<histPrev) add('MACD',-7,'ヒストグラム拡大 下落加速','📉');
-  else                add('MACD',-5,'MACDマイナス圏 下落継続','📉');
+  var histRaw=macdObj.hist[last],histPrevRaw=macdObj.hist[last-1];
+  var histValid=histRaw!=null&&!isNaN(histRaw)&&histPrevRaw!=null&&!isNaN(histPrevRaw);
+  var hist=null,histPrev=null,isGC=false,isDC=false;
+  if(!histValid){
+    add('MACD',0,'MACD データ不足','📊');
+  }else{
+    hist=histRaw;histPrev=histPrevRaw;
+    isGC=hist>0&&histPrev<=0;isDC=hist<0&&histPrev>=0;
+    if(isGC)            add('MACD',+10,'ゴールデンクロス発生！','📈');
+    else if(isDC)       add('MACD',-10,'デッドクロス発生！','📉');
+    else if(hist>0&&hist>histPrev) add('MACD',+7,'ヒストグラム拡大 上昇加速','📈');
+    else if(hist>0)     add('MACD',+5,'MACDプラス圏 上昇継続','📈');
+    else if(hist<0&&hist<histPrev) add('MACD',-7,'ヒストグラム拡大 下落加速','📉');
+    else                add('MACD',-5,'MACDマイナス圏 下落継続','📉');
+  }
 
   // ⑤ ATRボラティリティ
   var atrVal=calcATR(highs,lows,closes,14);
@@ -1020,7 +1037,7 @@ var RANGE_MAP={'1m':'1d','5m':'5d','15m':'5d','30m':'1mo','1h':'3mo','1d':'1y','
 async function fetchYahooChart(code,interval){
   var sym=code+'.T';
   var range=RANGE_MAP[interval]||'1y';
-  var url='/yfin/v8/finance/chart/'+sym+'?interval='+interval+'&range='+range+'&includePrePost=false&_t='+Date.now();
+  var url='/yfin/v8/finance/chart/'+sym+'?interval='+interval+'&range='+range+'&includePrePost=false&includeAdjustedClose=true&_t='+Date.now();
   var r=await fetch(url);
   if(!r.ok)throw new Error('HTTP '+r.status);
   var j=await r.json();
@@ -1083,17 +1100,54 @@ async function fetchTimeframeSignal(code,interval){
   }catch(e){return null;}
 }
 
-function processChartData(result, interval){
+// 未確定足（現在進行中でまだ終わっていない足）の判定
+// 日足の例: regularMarketTime が当日かつ市場時間内なら、当日の足はまだ確定していない
+function isLastBarUnconfirmed(meta,timestamps,interval){
+  if(!timestamps||!timestamps.length)return false;
+  var lastTs=timestamps[timestamps.length-1];
+  var now=meta.regularMarketTime||Math.floor(Date.now()/1000);
+  var barSec={'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600}[interval];
+  if(barSec){
+    // 分足・時間足: そのバーの期間がまだ終わっていなければ未確定
+    return (lastTs+barSec)>now;
+  }
+  var ctp=meta.currentTradingPeriod&&meta.currentTradingPeriod.regular;
+  if(interval==='1d'){
+    var sameSession=Math.abs(now-lastTs)<36*3600;
+    if(ctp)return sameSession&&now>=ctp.start&&now<ctp.end;
+    var d=new Date(now*1000);
+    var jstHour=(d.getUTCHours()+9)%24;
+    var sameCalDay=Math.floor(now/86400)===Math.floor(lastTs/86400);
+    return sameCalDay&&jstHour>=9&&jstHour<15;
+  }
+  if(interval==='1wk'){
+    var withinWeek=(now-lastTs)<6*86400;
+    if(!withinWeek)return false;
+    return ctp?now<ctp.end:true;
+  }
+  return false;
+}
+
+function processChartData(result, interval, includeUnconfirmed){
+  includeUnconfirmed=!!includeUnconfirmed;
   var meta=result.meta||{};
   var timestamps=result.timestamp||[];
   var q=result.indicators&&result.indicators.quote&&result.indicators.quote[0]||{};
+  var lastTsOrig=timestamps.length?timestamps[timestamps.length-1]:null;
+  var unconfirmed=isLastBarUnconfirmed(meta,timestamps,interval);
   var raw=timestamps.map(function(t,i){
     return{t:t,o:q.open&&q.open[i],h:q.high&&q.high[i],l:q.low&&q.low[i],c:q.close&&q.close[i],v:q.volume&&q.volume[i]};
   }).filter(function(r){return r.c!=null&&!isNaN(r.c)&&r.c>0;});
+  // 既定は確定足のみでスコア計算する。未確定足を含めるのはユーザーがトグルした場合のみ
+  if(unconfirmed&&!includeUnconfirmed&&raw.length&&raw[raw.length-1].t===lastTsOrig){
+    raw.pop();
+  }
   if(raw.length<10)throw new Error('データ不足('+interval+'): '+raw.length+'件 — この時間軸はデータが少ない可能性があります');
   var isIntra=['1m','5m','15m','30m','1h'].indexOf(interval)>=0;
   return{
     meta:meta,
+    unconfirmed:unconfirmed,
+    includedUnconfirmed:unconfirmed&&includeUnconfirmed,
     opens:raw.map(function(r){return r.o||r.c;}),
     highs:raw.map(function(r){return r.h||r.c;}),
     lows:raw.map(function(r){return r.l||r.c;}),
@@ -1142,12 +1196,15 @@ async function analyze(){
 
   try{
     var interval=document.getElementById('isel').value;
+    var includeUnconfirmed=document.getElementById('includeUnconfirmedChk')&&document.getElementById('includeUnconfirmedChk').checked;
 
     // 1. チャートデータ取得
     setLdg('株価データ取得中...','Yahoo Finance: '+code+'.T');
     var chartResult=await fetchYahooChart(code,interval);
-    var cd=processChartData(chartResult, interval);
+    var cd=processChartData(chartResult, interval, includeUnconfirmed);
     var opens=cd.opens,highs=cd.highs,lows=cd.lows,closes=cd.closes,volumes=cd.volumes,dates=cd.dates,meta=cd.meta;
+    var unconfirmedBadgeEl=document.getElementById('unconfirmedBadge');
+    if(unconfirmedBadgeEl)unconfirmedBadgeEl.style.display=cd.includedUnconfirmed?'flex':'none';
     var stockName=meta.shortName||meta.longName||(code+'（日本株）');
     var last=closes.length-1;
     var cur=closes[last],prev=closes[last-1];
@@ -1708,10 +1765,10 @@ function renderNews(news,code){
     var tag='',cls='neu';
     if(tl.match(/上昇|急騰|最高|買い|増益|黒字|好調|強気|上方/)){tag='ポジティブ';cls='pos';}
     else if(tl.match(/下落|急落|最安|売り|減益|赤字|不振|弱気|下方|懸念/)){tag='ネガティブ';cls='neg';}
-    return '<a class="news-item" href="'+url+'" target="_blank" rel="noopener">'+
-      '<div class="news-title">'+title+'</div>'+
-      '<div class="news-meta"><span class="news-src">'+src+'</span>'+
-      (timeStr?'<span class="news-time">'+timeStr+'</span>':'')+
+    return '<a class="news-item" href="'+safeHref(url)+'" target="_blank" rel="noopener">'+
+      '<div class="news-title">'+escHtml(title)+'</div>'+
+      '<div class="news-meta"><span class="news-src">'+escHtml(src)+'</span>'+
+      (timeStr?'<span class="news-time">'+escHtml(timeStr)+'</span>':'')+
       (tag?'<span class="news-tag '+cls+'">'+tag+'</span>':'')+
       '</div></a>';
   }).join('');
@@ -3163,17 +3220,37 @@ function showToastMsg(msg) {
   setTimeout(function(){ el.style.display='none'; el.className=prev||'errmsg'; }, 3000);
 }
 
+// 管理者トークン: サーバー(env.ADMIN_TOKEN)と照合するためこの端末のlocalStorageにのみ保存する。
+// HTML/JSソース自体にはトークン値を一切埋め込まない（初回に入力を求める）
+var ADMIN_TOKEN_KEY = 'kabu_admin_token';
+function getAdminToken(promptIfMissing) {
+  var t = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!t && promptIfMissing) {
+    t = window.prompt('管理者トークンを入力してください（この端末にのみ保存されます）') || '';
+    if (t) localStorage.setItem(ADMIN_TOKEN_KEY, t);
+  }
+  return t || '';
+}
+
 function triggerScan() {
   var btn = document.getElementById('scanTriggerBtn');
   var icon = document.getElementById('scanTriggerIcon');
   var txt = document.getElementById('scanTriggerTxt');
   if (!btn || btn.disabled) return;
+  var adminToken = getAdminToken(true);
+  if (!adminToken) return;
   btn.disabled = true;
   icon.textContent = '⏳';
   txt.textContent = 'スキャン中...';
 
-  fetch('/api/scan-trigger', { method: 'POST' })
-    .then(function(r){ return r.json(); })
+  fetch('/api/scan-trigger', { method: 'POST', headers: { 'X-Admin-Token': adminToken } })
+    .then(function(r){
+      if (r.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        throw new Error('認証失敗 — トークンが正しくありません（次回再入力してください）');
+      }
+      return r.json();
+    })
     .then(function(data) {
       if (data.ok) {
         icon.textContent = '✓';

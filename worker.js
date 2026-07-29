@@ -438,11 +438,6 @@ async function runScanner(env, maxStocks) {
     'Prefer': 'return=minimal'
   };
 
-  // 今日のデータを削除してから新規挿入
-  await fetch(`${supaUrl}/rest/v1/scan_results?scan_date=eq.${today}`, {
-    method: 'DELETE', headers: svcHeaders
-  });
-
   const records = top50.map(r => ({
     code: r.code, name: r.name, score: r.score, signal: r.signal,
     price: r.price, change_pct: r.change_pct, volume_ratio: r.volume_ratio,
@@ -451,14 +446,16 @@ async function runScanner(env, maxStocks) {
     gap_pct: r.gap_pct, scan_date: today
   }));
 
+  // upsert: (scan_date, code) にユニーク制約がある前提。事前DELETEは行わない
+  // → INSERT失敗時に当日データが失われたまま残る事故を防ぐ（migrations/001_scan_results_unique.sql 適用が必須）
   const insertRes = await fetch(`${supaUrl}/rest/v1/scan_results`, {
     method: 'POST',
-    headers: { ...svcHeaders, 'Prefer': 'return=minimal' },
+    headers: { ...svcHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify(records)
   });
   if (!insertRes.ok) {
     const errBody = await insertRes.text();
-    throw new Error(`Supabase INSERT失敗: ${insertRes.status} ${errBody}`);
+    throw new Error(`Supabase upsert失敗: ${insertRes.status} ${errBody}（Supabase無料プランが一時停止している可能性があります。ダッシュボードでRestoreしてください）`);
   }
 
   return { scanned: results.length, saved: top50.length, date: today, market_condition: mc };
@@ -510,21 +507,41 @@ async function handleScanner(request, env, url) {
   }
 }
 
+// トークンをSHA-256ハッシュ化して固定長バイト列で比較する（文字列長・内容のタイミングリークを避ける）
+async function timingSafeEqual(a, b) {
+  const enc = new TextEncoder();
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a || '')),
+    crypto.subtle.digest('SHA-256', enc.encode(b || ''))
+  ]);
+  const va = new Uint8Array(ha), vb = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
+}
+
+// 同一オリジン専用エンドポイント（CORSヘッダを付与しない = クロスオリジンからの読み取りをブラウザが拒否する）
 async function handleScanTrigger(request, env) {
-  if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders() });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 200 });
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), {
-      status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
+      status: 405, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  const token = request.headers.get('X-Admin-Token') || '';
+  if (!env.ADMIN_TOKEN || !(await timingSafeEqual(token, env.ADMIN_TOKEN))) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' }
     });
   }
   try {
     const result = await runScanner(env, 44);
     return new Response(JSON.stringify({ ok: true, ...result }), {
-      status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
+      status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' }
     });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders() }
+      status: 500, headers: { 'Content-Type': 'application/json' }
     });
   }
 }

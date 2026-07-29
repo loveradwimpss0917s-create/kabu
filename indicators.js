@@ -2,6 +2,27 @@
 // worker.js: import { ... } from './indicators.js'
 // index.html: <script type="module"> で import し、window.* に橋渡しして既存の非moduleスクリプトから使う
 
+// Yahoo Finance chart API のレスポンス（chart.result[0]）から、
+// adjclose(分割・配当調整後終値)の比率をO/H/L/Cにも適用した系列を作る。
+// 未調整のcloseのままだと配当落ちが指標・リターン計算に混入するため。
+// 画面/DBに表示する「現在値」は rawClose（未調整の実際の株価）を使うこと。
+export function buildAdjustedSeries(chart) {
+  const q = chart.indicators?.quote?.[0] || {};
+  const adj = chart.indicators?.adjclose?.[0]?.adjclose || null;
+  const timestamps = chart.timestamp || [];
+  const o = [], h = [], l = [], c = [], v = [], dates = [], rawClose = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const rawO = q.open?.[i], rawH = q.high?.[i], rawL = q.low?.[i], rawC = q.close?.[i], rawV = q.volume?.[i];
+    if (rawO == null || rawH == null || rawL == null || rawC == null || rawV == null || rawC <= 0) continue;
+    const adjC = (adj && adj[i] != null) ? adj[i] : rawC;
+    const ratio = rawC > 0 ? adjC / rawC : 1;
+    o.push(rawO * ratio); h.push(rawH * ratio); l.push(rawL * ratio); c.push(adjC); v.push(rawV);
+    rawClose.push(rawC);
+    dates.push(timestamps[i]);
+  }
+  return { o, h, l, c, v, dates, rawClose };
+}
+
 export function calcSMA(arr, p) {
   return arr.map((_, i) => i < p - 1 ? null : arr.slice(i - p + 1, i + 1).reduce((a, b) => a + b, 0) / p);
 }

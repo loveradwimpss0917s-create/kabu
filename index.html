@@ -1303,8 +1303,8 @@ async function analyze(){
     var vClass=ts.vClass;
     var signalClass=ts.signalClass;
 
-    // ── 地合いフィルター適用 ──
-    if(!isIntraday&&mc.adj!==0){
+    // ── 地合いフィルター適用 ── 決算veto中（後述）は中立表示を維持するためスキップする
+    if(!isIntraday&&mc.adj!==0&&!ts.earningsVeto.active){
       ts.details.push({name:'地合いフィルター',pts:mc.adj,d:'日経225 '+mc.level+(mc.n225?' ('+mc.n225.toLocaleString()+'pt)':'')+' — 地合い調整',icon:'🇯🇵'});
       score=Math.max(0,Math.min(100,score+mc.adj));
       if(score>=90){signalClass='strong-buy';ts.signal='STRONG BUY';ts.signalIcon='🚀';ts.signalJa='強い買い';}
@@ -1315,21 +1315,10 @@ async function analyze(){
       vClass=signalClass==='buy'||signalClass==='strong-buy'?'buy':signalClass==='sell'||signalClass==='strong-sell'?'sell':'hold';
     }
 
-    // ── 決算3日前シグナル除外 ──
-    var daysToEarnings=null;
-    if(!isIntraday&&summaryData){
-      var calEx=summaryData.calendarEvents||{};
-      var earArrEx=calEx.earnings&&calEx.earnings.earningsDate;
-      var nextEarEx=earArrEx&&earArrEx[0]&&earArrEx[0].raw;
-      if(nextEarEx){
-        daysToEarnings=Math.ceil((nextEarEx-Date.now()/1000)/86400);
-        if(daysToEarnings>=0&&daysToEarnings<=3){
-          signalClass='neutral';ts.signal='NEUTRAL';ts.signalIcon='⏸️';ts.signalJa='決算前(様子見)';
-          vClass='hold';
-          ts.details.push({name:'決算リスク',pts:0,d:'決算まで'+daysToEarnings+'日 — シグナル除外（イベントリスク回避）','icon':'📅'});
-        }
-      }
-    }
+    // 決算接近時の拒否権（veto）はcalcTradeScore内で一元判定済み（0〜7日、スコア自体を中立化する）。
+    // ここでの独自の3日判定・ラベルのみ書き換えは廃止し、ts.earningsVetoをそのまま使う
+    if(ts.earningsVeto.active){ signalClass='neutral'; vClass='hold'; }
+    var daysToEarnings=ts.earningsVeto.active?ts.earningsVeto.days:null;
 
     // 直近分析のシグナルを保持（取引記録の紐付け用）
     _lastAnalysis={code:code,signal:ts.signal,signalClass:signalClass,score:score};
@@ -1384,8 +1373,8 @@ async function analyze(){
     signalBadge.className='signal-badge '+signalClass;
     document.getElementById('vtxt').textContent=ts.signalJa+' ('+stockName+')';
     var subTexts={'strong-buy':'全条件揃い — 最高のエントリー機会','buy':'上昇トレンド継続中 — 買いエントリー検討','neutral':'明確な方向性なし — 様子見推奨','sell':'下落トレンド — 売り/ショート検討','strong-sell':'全指標悪化 — ポジション回避'};
-    var subTxt=(daysToEarnings!=null&&daysToEarnings>=0&&daysToEarnings<=3)
-      ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためシグナル除外'
+    var subTxt=(daysToEarnings!=null)
+      ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためスコアを中立表示にしています'
       :(subTexts[signalClass]||'');
     document.getElementById('vsub').textContent=subTxt+'  |  スコア: '+score.toFixed(0)+'/100';
     // 地合いバッジ

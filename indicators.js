@@ -234,7 +234,12 @@ export function calcTradeScore(opens, highs, lows, closes, volumes, summaryData,
     add('52W高値', 0, 'データ不足（' + (interval || '1d') + '足では52週相当のデータが取得できません）', '🏆');
   }
 
-  // ⑧ 材料・決算・アナリスト（summaryData未指定時はスキップされる）
+  // ⑧ 決算・アナリスト（summaryData未指定時はスキップされる）
+  // 過去時点のシミュレーション（バックテスト）では決算日履歴・アナリスト評価はYahooから
+  // 取得できず検証不能なため、スコアには一切加点しない。決算接近は「拒否権(veto)」として
+  // 別扱いし、アナリスト評価は情報表示のみとする（Task E-1）
+  let earningsVeto = { active: false, days: null };
+  let analystInfo = null;
   if (summaryData) {
     const cal = summaryData.calendarEvents || {};
     const earArr = cal.earnings && cal.earnings.earningsDate;
@@ -242,31 +247,41 @@ export function calcTradeScore(opens, highs, lows, closes, volumes, summaryData,
     const now = Date.now() / 1000;
     if (nextEar) {
       const daysEar = Math.ceil((nextEar - now) / 86400);
-      if (daysEar >= 0 && daysEar <= 7) add('材料', +15, '決算まで' + daysEar + '日 — カタリスト大！', '📅');
-      else if (daysEar >= 0 && daysEar <= 30) add('材料', +5, '決算まで' + daysEar + '日', '📅');
+      if (daysEar >= 0 && daysEar <= 7) {
+        earningsVeto = { active: true, days: daysEar };
+        add('決算リスク', 0, '決算まで' + daysEar + '日 — イベントリスクのためスコアを中立表示にします', '📅');
+      } else if (daysEar >= 0 && daysEar <= 30) {
+        add('決算', 0, '決算まで' + daysEar + '日（スコアには反映されません）', '📅');
+      }
     }
     const fd = summaryData.financialData || {};
     const recKey = fd.recommendationKey || '';
-    if (recKey === 'strong_buy') add('アナリスト', +8, 'コンセンサス: STRONG BUY', '👨‍💼');
-    else if (recKey === 'buy') add('アナリスト', +4, 'コンセンサス: BUY', '👨‍💼');
-    else if (recKey === 'sell') add('アナリスト', -4, 'コンセンサス: SELL', '👨‍💼');
-    else if (recKey === 'strong_sell') add('アナリスト', -8, 'コンセンサス: STRONG SELL', '👨‍💼');
+    const recLabel = { strong_buy: 'STRONG BUY', buy: 'BUY', hold: 'HOLD', sell: 'SELL', strong_sell: 'STRONG SELL' }[recKey];
+    if (recLabel) {
+      analystInfo = { recommendationKey: recKey, label: recLabel };
+      add('アナリスト(参考)', 0, 'コンセンサス: ' + recLabel + '（過去時点の検証ができないためスコアには反映されません）', '👨‍💼');
+    }
   }
 
   score = Math.max(0, Math.min(100, score));
 
   let signal, signalClass, signalIcon, signalJa;
-  if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; signalIcon = '🚀'; signalJa = '強い買い'; }
+  if (earningsVeto.active) {
+    // 数値そのものを中立化する（ラベルだけ書き換えると数値だけBUY相当のまま残ってしまうため）
+    score = 50;
+    signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '⏸️'; signalJa = '決算前(様子見)';
+  } else if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; signalIcon = '🚀'; signalJa = '強い買い'; }
   else if (score >= 75) { signal = 'BUY'; signalClass = 'buy'; signalIcon = '📈'; signalJa = '買い'; }
   else if (score >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '⚖️'; signalJa = '中立'; }
   else if (score >= 30) { signal = 'SELL'; signalClass = 'sell'; signalIcon = '📉'; signalJa = '売り'; }
   else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; signalIcon = '⬇️'; signalJa = '強い売り'; }
 
-  const vClass = (signalClass === 'buy' || signalClass === 'strong-buy') ? 'buy' : (signalClass === 'sell' || signalClass === 'strong-sell') ? 'sell' : 'hold';
+  const vClass = earningsVeto.active ? 'hold' : (signalClass === 'buy' || signalClass === 'strong-buy') ? 'buy' : (signalClass === 'sell' || signalClass === 'strong-sell') ? 'sell' : 'hold';
 
   return {
     score, signal, signalClass, signalIcon, signalJa, details, vClass,
     rsi, atrPct, gapPct, pct52w, nearHigh52w, volRatio,
-    hist, isGC, isDC, macdGc: isGC, emaSignal, e20, e50, e200
+    hist, isGC, isDC, macdGc: isGC, emaSignal, e20, e50, e200,
+    earningsVeto, analystInfo
   };
 }

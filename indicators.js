@@ -143,16 +143,19 @@ export function calcTradeScore(opens, highs, lows, closes, volumes, summaryData,
   }
 
   // ① 出来高前日比
+  // バックテスト実測（2022-08〜2026-06、80銘柄・76,240件）で加点あり/なし群の
+  // 20日超過リターン差が統計的に有意でなかった（95%CI: [-0.25%, +0.34%]、0を跨ぐ）ため、
+  // Task E-2でスコアへの加点を廃止し情報表示のみとした
   let volRatio = 1;
   if (last >= 1 && volumes[last - 1] > 0) {
     const volPrev = volumes[last - 1], volCur = volumes[last];
     volRatio = volCur / volPrev;
     const volPct = ((volRatio - 1) * 100).toFixed(0);
-    if (volRatio >= 3) add('出来高', +20, '前日比+' + volRatio.toFixed(1) + 'x — 急騰シグナル！', '🔥');
-    else if (volRatio >= 2.5) add('出来高', +15, '前日比+' + volPct + '% — 大幅増加', '📊');
-    else if (volRatio >= 2) add('出来高', +10, '前日比+' + volPct + '% — 増加', '📊');
-    else if (volRatio <= 0.5) add('出来高', -10, '前日比' + volPct + '% — 閑散相場', '📉');
-    else add('出来高', 0, '前日比' + (volRatio >= 1 ? '+' : '') + volPct + '%', '📊');
+    if (volRatio >= 3) add('出来高(参考)', 0, '前日比+' + volRatio.toFixed(1) + 'x（実測では優位性なし・情報表示のみ）', '🔥');
+    else if (volRatio >= 2.5) add('出来高(参考)', 0, '前日比+' + volPct + '%（実測では優位性なし・情報表示のみ）', '📊');
+    else if (volRatio >= 2) add('出来高(参考)', 0, '前日比+' + volPct + '%（実測では優位性なし・情報表示のみ）', '📊');
+    else if (volRatio <= 0.5) add('出来高(参考)', 0, '前日比' + volPct + '%（実測では優位性なし・情報表示のみ）', '📉');
+    else add('出来高(参考)', 0, '前日比' + (volRatio >= 1 ? '+' : '') + volPct + '%', '📊');
   }
 
   // ② EMA20/50/200トレンド配列
@@ -209,14 +212,17 @@ export function calcTradeScore(opens, highs, lows, closes, volumes, summaryData,
   else add('ATRボラ', 0, 'ATR=' + atrPct.toFixed(2) + '% 安定範囲', '⚡');
 
   // ⑥ ギャップ率（始値 vs 前日終値）
+  // バックテスト実測で加点あり/なし群の差が統計的に有意でなく、符号も逆
+  // （GU=買い材料としていたが実測は-0.025、弱い逆効果）だったため、
+  // Task E-2でスコアへの加点を廃止し情報表示のみとした
   let gapPct = 0;
   if (opens && opens[last] && last >= 1 && closes[last - 1] > 0) {
     gapPct = (opens[last] - closes[last - 1]) / closes[last - 1] * 100;
-    if (gapPct >= 3 && gapPct <= 8) add('GU/GD', +10, 'GU=+' + gapPct.toFixed(1) + '% 理想的ギャップアップ', '🎯');
-    else if (gapPct > 1) add('GU/GD', +5, 'GU=+' + gapPct.toFixed(1) + '%', '🎯');
-    else if (gapPct > 8) add('GU/GD', 0, 'GU=+' + gapPct.toFixed(1) + '% 過度なGU', '🎯');
-    else if (gapPct < -3) add('GU/GD', -10, 'GD=' + gapPct.toFixed(1) + '% ギャップダウン', '🎯');
-    else add('GU/GD', 0, 'ギャップ=' + gapPct.toFixed(1) + '%', '🎯');
+    if (gapPct >= 3 && gapPct <= 8) add('GU/GD(参考)', 0, 'GU=+' + gapPct.toFixed(1) + '%（実測では優位性なし・情報表示のみ）', '🎯');
+    else if (gapPct > 1) add('GU/GD(参考)', 0, 'GU=+' + gapPct.toFixed(1) + '%（実測では優位性なし・情報表示のみ）', '🎯');
+    else if (gapPct > 8) add('GU/GD(参考)', 0, 'GU=+' + gapPct.toFixed(1) + '% 過度なGU', '🎯');
+    else if (gapPct < -3) add('GU/GD(参考)', 0, 'GD=' + gapPct.toFixed(1) + '%（実測では優位性なし・情報表示のみ）', '🎯');
+    else add('GU/GD(参考)', 0, 'ギャップ=' + gapPct.toFixed(1) + '%', '🎯');
   }
 
   // ⑦ 年初来高値（52週高値） — 時間軸に応じたバー数が無ければ「データ不足」として加点対象から除外する

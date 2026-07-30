@@ -107,11 +107,17 @@ async function handleYfin(request, url) {
   };
   if (cookie) fetchHeaders['Cookie'] = cookie;
   try {
-    const res = await fetch(targetUrl, { headers: fetchHeaders });
+    // cache: 'no-store' でCloudflareのエッジキャッシュを明示的に迂回する。
+    // 株価は毎回最新であるべきで、スキャナー結果と食い違う古いデータが返る事故を防ぐ
+    const res = await fetch(targetUrl, { headers: fetchHeaders, cache: 'no-store' });
     const body = await res.text();
     return new Response(body, {
       status: res.status,
-      headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/json', ...corsHeaders() }
+      headers: {
+        'Content-Type': res.headers.get('Content-Type') || 'application/json',
+        'Cache-Control': 'no-store',
+        ...corsHeaders()
+      }
     });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {

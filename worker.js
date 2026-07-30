@@ -107,9 +107,11 @@ async function handleYfin(request, url) {
   };
   if (cookie) fetchHeaders['Cookie'] = cookie;
   try {
-    // cache: 'no-store' でCloudflareのエッジキャッシュを明示的に迂回する。
-    // 株価は毎回最新であるべきで、スキャナー結果と食い違う古いデータが返る事故を防ぐ
-    const res = await fetch(targetUrl, { headers: fetchHeaders, cache: 'no-store' });
+    // クロスオリジン(Yahoo)へのfetchでは標準のRequestInit `cache`は未サポートで
+    // 例外(HTTP 500)になるため使わない。Cloudflare固有の cf.cacheTtl で
+    // エッジキャッシュを明示的に無効化する。株価は毎回最新であるべきで、
+    // スキャナー結果と食い違う古いデータが返る事故を防ぐ
+    const res = await fetch(targetUrl, { headers: fetchHeaders, cf: { cacheTtl: 0, cacheEverything: false } });
     const body = await res.text();
     return new Response(body, {
       status: res.status,

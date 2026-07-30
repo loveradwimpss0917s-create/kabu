@@ -174,7 +174,7 @@ async function handleGnews(request, url) {
 
 // ── SCANNER LOGIC ──────────────────────────────────────────────────────────
 
-async function scanStock(code, name, crumb, cookie) {
+async function scanStock(code, name, crumb, cookie, nextEarningsEpoch) {
   const symbol = code + '.T';
   const params = new URLSearchParams({ interval: '1d', range: '1y', includeAdjustedClose: 'true' });
   if (crumb) params.set('crumb', crumb);
@@ -196,7 +196,13 @@ async function scanStock(code, name, crumb, cookie) {
     const series = buildAdjustedSeries(chart);
     if (series.c.length < 60) return null;
 
-    const ts = calcTradeScore(series.o, series.h, series.l, series.c, series.v, null, '1d');
+    // 決算日はearnings_calendarキャッシュから渡された値のみを使う（Subrequest数上限のため
+    // ここではquoteSummaryを個別取得しない）。index.htmlのanalyze()と同じ判定になるよう、
+    // calcTradeScoreにはYahoo quoteSummary形式と同じ最小構造で渡す
+    const summaryData = nextEarningsEpoch
+      ? { calendarEvents: { earnings: { earningsDate: [{ raw: nextEarningsEpoch }] } } }
+      : null;
+    const ts = calcTradeScore(series.o, series.h, series.l, series.c, series.v, summaryData, '1d');
     const last = series.c.length - 1;
     const price = series.rawClose[last];
     const prevClose = series.rawClose[last - 1] || price;
@@ -207,6 +213,7 @@ async function scanStock(code, name, crumb, cookie) {
       score: ts.score,
       signal: ts.signal,
       signal_class: ts.signalClass,
+      earningsVetoActive: ts.earningsVeto.active,
       price: Math.round(price * 10) / 10,
       change_pct: Math.round(changePct * 100) / 100,
       volume_ratio: Math.round(ts.volRatio * 100) / 100,
@@ -225,6 +232,23 @@ async function scanStock(code, name, crumb, cookie) {
   }
 }
 
+// earnings_calendarキャッシュ（週次更新、scripts/fetch-earnings-calendar.mjsが書き込む）を
+// 1回のSupabase読み取りで取得する。銘柄ごとに個別取得しないのはSubrequest数上限のため
+async function fetchEarningsMap(env) {
+  const map = new Map();
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/earnings_calendar?select=code,next_earnings_epoch`, {
+      headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`, Accept: 'application/json' }
+    });
+    if (!res.ok) return map;
+    const rows = await res.json();
+    if (Array.isArray(rows)) for (const r of rows) if (r.next_earnings_epoch != null) map.set(r.code, r.next_earnings_epoch);
+  } catch (e) {
+    console.error('earnings_calendar取得エラー:', e.message);
+  }
+  return map;
+}
+
 // opts.offset/opts.limit で SCAN_STOCKS の部分範囲だけを走査する（日次cronを2本に分割し
 // 81銘柄全体を1本あたり50サブリクエスト未満に収めるため）。省略時は全銘柄を対象にする。
 async function runScanner(env, opts) {
@@ -235,6 +259,7 @@ async function runScanner(env, opts) {
   if (!crumb) throw new Error('crumb取得失敗');
 
   const mc = await getMarketCondition(crumb, cookie);
+  const earningsMap = await fetchEarningsMap(env);
 
   const stockList = limit != null ? SCAN_STOCKS.slice(offset, offset + limit) : SCAN_STOCKS.slice(offset);
   const results = [];
@@ -244,17 +269,19 @@ async function runScanner(env, opts) {
   for (let i = 0; i < stockList.length; i += batchSize) {
     if (Date.now() - scanStart > MAX_SCAN_MS) break;
     const batch = stockList.slice(i, i + batchSize);
-    const batchRes = await Promise.all(batch.map(([code, name]) => scanStock(code, name, crumb, cookie)));
+    const batchRes = await Promise.all(batch.map(([code, name]) => scanStock(code, name, crumb, cookie, earningsMap.get(code))));
     for (const r of batchRes) {
       if (r) {
-        const adjScore = Math.max(0, Math.min(100, r.score + mc.adj));
+        // 決算veto中はindex.htmlのanalyze()と同様、地合い調整をスキップして中立表示を維持する
+        const adjScore = r.earningsVetoActive ? r.score : Math.max(0, Math.min(100, r.score + mc.adj));
         let signal, signalClass;
         if (adjScore >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; }
         else if (adjScore >= 75) { signal = 'BUY'; signalClass = 'buy'; }
         else if (adjScore >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; }
         else if (adjScore >= 30) { signal = 'SELL'; signalClass = 'sell'; }
         else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; }
-        results.push({ ...r, score: adjScore, signal, signal_class: signalClass });
+        const { earningsVetoActive, ...rest } = r;
+        results.push({ ...rest, score: adjScore, signal, signal_class: signalClass });
       }
     }
     if (i + batchSize < stockList.length && Date.now() - scanStart < MAX_SCAN_MS - 500) {
@@ -451,7 +478,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    // 81銘柄を1本のcronで走査すると crumb2+market1+銘柄81+upsert1=85 サブリクエストとなり
+    // 81銘柄を1本のcronで走査すると crumb2+market1+earnings1+銘柄81+upsert1=86 サブリクエストとなり
     // 無料プランの上限50を超え毎回失敗する。2本のcronに分割し、それぞれ50未満に収める
     const isSecondHalf = event.cron === '10 23 * * *';
     const opts = isSecondHalf ? { offset: 40, limit: 41 } : { offset: 0, limit: 40 };

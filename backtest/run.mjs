@@ -11,21 +11,24 @@
 //       fee/slippage/tax/bootstrapIters は環境変数 BT_FEE_BPS 等で上書き可能。
 
 import { calcTradeScore, buildAdjustedSeries } from '../indicators.js';
-import { SCAN_STOCKS } from '../stocks.js';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// GitHub Actionsの共有IPから直接Yahoo Financeを叩くと、世界中の無関係なジョブと
-// 合算されたレート制限に恒常的に引っかかり続けることを実運用で確認した
-// （429が指数バックオフ・複数分の待機を挟んでも一切解消せず、81銘柄+crumb取得の
-// 全リクエストが68分間ノーガードで失敗し続けた）。
-// そのため、自前でYahooのcrumbを取得して直接叩くのではなく、既にYahoo Financeへの
-// 接続実績があるCloudflare Worker（本アプリ本体）の /yfin/* プロキシ経由でデータを
-// 取得する。crumbの取得・キャッシュはWorker側の既存ロジックにそのまま委ねる
-const WORKER_BASE = process.env.BT_WORKER_BASE || 'https://kabu.loveradwimps-s0917s.workers.dev';
+// 「測定器の強化」対応: 以前はGitHub Actionsから毎回Cloudflare Worker経由でYahoo Financeへ
+// 都度アクセスしていたが、これは81銘柄程度が限度で、東証の普通株全体（約3,770銘柄）×10年分を
+// 毎サイクル取得するのは非現実的（Yahoo/Workerへの負荷、GitHub Actionsの実行時間の両面で）。
+// そのため取得と分析を分離した:
+//   backtest/build-universe.mjs … 検証対象銘柄リストをSupabase(bt_universe)に構築（低頻度）
+//   backtest/fetch-cache.mjs    … 各銘柄の日足をWorker経由で取得しSupabase(bt_prices_cache)に
+//                                  キャッシュ（低頻度・再開可能）
+//   backtest/run.mjs（このファイル）… キャッシュから読むだけ。Yahoo/Workerには一切アクセスしない
+// これにより(a)の特徴量探索サイクルはSupabaseからの読み出しのみで完結し高速に繰り返せる
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fhpwmafnbzmtjemldmcy.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocHdtYWZuYnptdGplbWxkbWN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxOTA5OTQsImV4cCI6MjA5Nzc2Njk5NH0.DUlD9QbME-ReQY7ujlA172sMObR1JRay7dJAqoPq4-U';
 
 function num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
 
@@ -37,8 +40,6 @@ const CONFIG = {
   horizons: [1, 5, 20],
   warmupBars: 250,       // EMA200等が収束するまで捨てる日数
   bootstrapIters: Math.round(num(process.env.BT_BOOTSTRAP_ITERS, 2000)),
-  fetchDelayMs: 1500,    // Worker経由リクエストの間隔（Cloudflare/Yahoo双方への配慮）
-  maxRetries: 4,          // 429/5xx受信時の再試行回数（指数バックオフ）
   blockLength: Math.round(num(process.env.BT_BLOCK_LENGTH, 40)),
   // ブートストラップのブロック長（営業日）。20営業日ホライズンのリターンは
   // 連続する最大19営業日が同じ価格変動を共有し強い時系列相関を持つため、
@@ -64,50 +65,60 @@ const ITEM_NAME_TO_COL = {
 };
 const ITEM_COLS = ['vol_pts', 'ema_pts', 'rsi_pts', 'macd_pts', 'atr_pts', 'gap_pts', 'w52_pts', 'material_pts'];
 
-// ── データ取得（Cloudflare Worker の /yfin/* プロキシ経由） ────────────────────
+// ── データ取得（Supabaseキャッシュから読むのみ。Yahoo/Workerへは一切アクセスしない） ──
 
-// 429（Workerが内部でYahooから429を受けた場合に転送されうる）・5xx（Worker/Cloudflare側の
-// 一時的な不調）を対象にRetry-After（無ければ指数バックオフ+ジッター）で待って再試行する
 async function fetchWithRetry(url, options, maxRetries) {
-  maxRetries = maxRetries ?? CONFIG.maxRetries;
+  maxRetries = maxRetries ?? 3;
   let res;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     res = await fetch(url, options);
     if (res.status !== 429 && res.status < 500) return res;
     if (attempt === maxRetries) return res;
-    const retryAfter = parseFloat(res.headers.get('retry-after'));
-    const waitMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : (3000 * 2 ** attempt + Math.random() * 1000);
+    const waitMs = 1000 * 2 ** attempt + Math.random() * 500;
     console.log(`  HTTP ${res.status}受信 — ${Math.round(waitMs / 1000)}秒待って再試行 (${attempt + 1}/${maxRetries})`);
     await sleep(waitMs);
   }
   return res;
 }
 
-// 失敗時は null を返さず例外を投げる（HTTPステータス・エラー内容を呼び出し側で
-// ログに残せるようにするため。「取得失敗」とだけ表示されて原因が分からない、
-// という事態を避ける）
-async function fetchHistory(code) {
-  const params = new URLSearchParams({ interval: '1d', range: '5y', includeAdjustedClose: 'true' });
-  const res = await fetchWithRetry(`${WORKER_BASE}/yfin/v8/finance/chart/${code}.T?${params}`, {
-    headers: { Accept: 'application/json' }
-  });
-  const bodyText = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText} — ${bodyText.slice(0, 300)}`);
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+const anonHeaders = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, Accept: 'application/json' };
+
+// bt_prices_cache を「1ページ分だけ」読んで返す非同期ジェネレータ。
+// 3,770銘柄×10年分の系列を一度に全件メモリへ載せるとNode側の負荷が大きいため、
+// ページ単位で取得→即座にsimulateStock()で軽量な行データへ変換→生の系列は破棄する
+// （常時メモリに残るのは軽量な観測行のみ）
+async function* iterateCachedSeries(pageSize) {
+  let offset = 0;
+  for (;;) {
+    const q = `${SUPABASE_URL}/rest/v1/bt_prices_cache?select=code,series&status=eq.done&order=code.asc&limit=${pageSize}&offset=${offset}`;
+    const res = await fetchWithRetry(q, { headers: anonHeaders });
+    if (!res.ok) throw new Error(`bt_prices_cache取得失敗: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    for (const r of rows) yield r;
+    if (rows.length < pageSize) return;
+    offset += pageSize;
   }
-  let data;
-  try { data = JSON.parse(bodyText); } catch (e) {
-    throw new Error(`JSON解析失敗 — ${bodyText.slice(0, 300)}`);
-  }
-  const chart = data?.chart?.result?.[0];
-  if (!chart) {
-    const err = data?.chart?.error;
-    throw new Error(`chart.resultが空 — ${err ? JSON.stringify(err) : bodyText.slice(0, 300)}`);
-  }
-  return chart;
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function fetchUniverseNames() {
+  const map = new Map();
+  let offset = 0;
+  const PAGE = 1000;
+  for (;;) {
+    const q = `${SUPABASE_URL}/rest/v1/bt_universe?select=code,name&order=code.asc&limit=${PAGE}&offset=${offset}`;
+    const res = await fetchWithRetry(q, { headers: anonHeaders });
+    if (!res.ok) throw new Error(`bt_universe取得失敗: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    for (const r of rows) map.set(r.code, r.name);
+    if (rows.length < PAGE) break;
+    offset += PAGE;
+  }
+  return map;
+}
 
 // ── スコア帯・項目別加点抽出 ─────────────────────────────────────────────────
 
@@ -472,9 +483,10 @@ function computeVerdict(dateList, dateStats, robustness) {
     criterion3_detail: { positiveSubPeriods: positiveCount, of: 3 },
     conclusion: allPass ? 'EDGE_CONFIRMED' : 'EDGE_NOT_CONFIRMED',
     survivorshipBiasNote:
-      '対象はSCAN_STOCKS（現在の大型株81銘柄の固定リスト）であり、3年間生き残り今も大型株である銘柄のみを' +
-      '対象としているため、結果は構造的に上方バイアスを持つ。EDGE_CONFIRMEDでも、この基準を辛うじて満たす' +
-      '程度の弱い結果（例: 20日超過リターンが+0.1%程度）は「優位性なし」と解釈するのが妥当である。'
+      '対象はbt_universe（現在時点でumihico/kabu-jsonに存在する普通株の固定リスト）であり、' +
+      '過去に上場廃止・整理銘柄となった企業は含まれない。したがって結果は構造的に上方バイアスを持つ。' +
+      'EDGE_CONFIRMEDでも、この基準を辛うじて満たす程度の弱い結果（例: 20日超過リターンが+0.1%程度）は' +
+      '「優位性なし」と解釈するのが妥当である。'
   };
 }
 
@@ -482,30 +494,32 @@ function computeVerdict(dateList, dateStats, robustness) {
 
 async function main() {
   console.log(`設定: ${JSON.stringify(CONFIG)}`);
-  console.log(`データ取得元: ${WORKER_BASE}/yfin/*（Cloudflare Worker経由。crumb処理はWorker側に委ねる）`);
+  console.log(`データ取得元: Supabase(bt_prices_cache) のキャッシュのみ。Yahoo/Workerへは一切アクセスしない`);
+
+  const nameMap = await fetchUniverseNames();
+  console.log(`ユニバース件数: ${nameMap.size}`);
 
   const allRows = [];
   const skippedStocks = [];
-  for (let idx = 0; idx < SCAN_STOCKS.length; idx++) {
-    const [code, name] = SCAN_STOCKS[idx];
-    process.stdout.write(`[${idx + 1}/${SCAN_STOCKS.length}] ${code} ${name} ... `);
+  let processed = 0;
+  const PAGE_SIZE = 100;
+  for await (const { code, series } of iterateCachedSeries(PAGE_SIZE)) {
+    processed++;
+    const name = nameMap.get(code) || code;
+    if (processed % 200 === 0) console.log(`  ...${processed}銘柄処理済み`);
     try {
-      const chart = await fetchHistory(code);
-      const rows = simulateStock(code, chart);
-      if (!rows.length) { console.log('データ不足'); skippedStocks.push({ code, name, reason: 'insufficient_data' }); }
-      else { allRows.push(...rows); console.log(`${rows.length}件`); }
+      if (!series) { skippedStocks.push({ code, name, reason: 'cache_error' }); continue; }
+      const rows = simulateStock(code, series);
+      if (!rows.length) skippedStocks.push({ code, name, reason: 'insufficient_data' });
+      else allRows.push(...rows);
     } catch (e) {
-      console.log('エラー: ' + e.message);
       skippedStocks.push({ code, name, reason: e.message });
-    } finally {
-      // continue/catch のいずれの経路でも必ず1回だけ待機する
-      // （以前はcontinueが待機処理を素通りし、81銘柄が約1.5秒で終わってしまっていた）
-      await sleep(CONFIG.fetchDelayMs);
     }
   }
+  console.log(`キャッシュから読み込み完了: ${processed}銘柄（有効${processed - skippedStocks.length} / スキップ${skippedStocks.length}）`);
 
   if (!allRows.length) {
-    console.error('有効なデータが1件もありません。終了します。');
+    console.error('有効なデータが1件もありません。先に backtest/build-universe.mjs と backtest/fetch-cache.mjs を実行してキャッシュを構築してください。');
     process.exit(1);
   }
 
@@ -527,9 +541,10 @@ async function main() {
     runId,
     config: CONFIG,
     universe: {
-      stockCount: SCAN_STOCKS.length,
-      scoredStockCount: SCAN_STOCKS.length - skippedStocks.length,
-      startDate: dateList[0], endDate: dateList[dateList.length - 1]
+      stockCount: processed,
+      scoredStockCount: processed - skippedStocks.length,
+      startDate: dateList[0], endDate: dateList[dateList.length - 1],
+      source: 'Supabase bt_prices_cache（umihico/kabu-json由来の普通株ユニバース。市場区分[プライム/スタンダード/グロース]の判別は未実装）'
     },
     coverage: {
       totalObservations: allRows.length,
@@ -563,6 +578,7 @@ function renderMarkdown(report) {
   lines.push('');
   lines.push(`- 対象期間: ${report.universe.startDate} 〜 ${report.universe.endDate}`);
   lines.push(`- 対象銘柄: ${report.universe.scoredStockCount} / ${report.universe.stockCount}（スキップ ${report.coverage.skippedStocks.length}件）`);
+  if (report.universe.source) lines.push(`- ユニバース: ${report.universe.source}`);
   lines.push(`- 観測数: ${report.coverage.totalObservations}件`);
   lines.push(`- コスト前提: 片道手数料${report.config.feeBpsOneWay}bps / 片道スリッページ${report.config.slippageBpsOneWay}bps / 譲渡益税${report.config.taxRatePct}%（利益時のみ）`);
   lines.push(`- スコア⑧（材料・アナリスト）: ${report.coverage.scoredItems}`);

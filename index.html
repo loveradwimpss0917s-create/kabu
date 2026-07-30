@@ -242,6 +242,15 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .monitor-bar{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:none;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);display:flex;align-items:center;gap:8px}
 .monitor-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);animation:pulse 1s infinite;flex-shrink:0}
 .unconfirmed-badge{background:var(--bg2);border:1px solid rgba(255,204,0,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow);align-items:center;gap:8px}
+.rel-underperf-badge{border-radius:10px;padding:12px 14px;margin:12px 0;font-size:11px;line-height:1.7;font-family:'JetBrains Mono',monospace}
+.rel-underperf-badge b{display:block;font-size:12px;margin-bottom:4px}
+.rel-underperf-badge.tier-caution{background:rgba(245,181,53,.08);border:1px solid rgba(245,181,53,.35);color:var(--txt2)}
+.rel-underperf-badge.tier-caution b{color:var(--yellow)}
+.rel-underperf-badge.tier-excluded{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.35);color:var(--txt2)}
+.rel-underperf-badge.tier-excluded b{color:var(--red)}
+.si-tier-note{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.scanner-item.tier-demoted{opacity:.55}
+.scanner-item.tier-demoted:active{opacity:.8}
 
 /* ── LOADING ── */
 .ldg{display:none;position:fixed;inset:0;background:rgba(4,6,15,.93);z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px}
@@ -595,6 +604,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
         <div class="v-sub" id="vsub">---</div>
       </div>
     </div>
+    <div class="rel-underperf-badge" id="relUnderperfBadge" style="display:none"></div>
     <div class="vgrid" id="vgrid"></div>
     <div class="score-breakdown" id="scoreBreakdown"></div>
   </div>
@@ -748,6 +758,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
         <input class="tj-input" id="tjExit" placeholder="決済価格 (¥) 任意" inputmode="decimal">
       </div>
       <div class="tj-form-row">
+        <input class="tj-input" id="tjSL" placeholder="損切り価格 (¥) 任意・保有中リスク集計用" inputmode="decimal">
+      </div>
+      <div class="tj-form-row">
         <input class="tj-input" id="tjMemo" placeholder="メモ（根拠・反省など）任意">
       </div>
       <button class="tj-add-btn" onclick="addTrade()">＋ 取引を記録</button>
@@ -851,6 +864,29 @@ function fmt(v,d){return v!=null&&!isNaN(v)?Number(v).toLocaleString('ja-JP',{ma
 function fmtB(v){if(v==null||isNaN(v))return '--';var a=Math.abs(v);if(a>=1e12)return (v/1e12).toFixed(2)+'兆';if(a>=1e8)return (v/1e8).toFixed(1)+'億';if(a>=1e4)return (v/1e4).toFixed(1)+'万';return v.toLocaleString();}
 function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function safeHref(u){try{var p=new URL(u,location.href);if(p.protocol==='http:'||p.protocol==='https:')return p.href;}catch(e){}return '#';}
+
+// バックテスト実測（2022-08〜2026-07、80銘柄、ブロックブートストラップ補正済みで有意性確認）に基づく
+// スコア帯別の相対劣後注記。30-75点は絶対リターンはプラス（PF>1・勝率55%超）だが
+// 市場平均対比の超過リターンが有意にマイナスだった帯（「損はしにくいが市場平均に劣後する」）。
+// 30点未満は買い候補から除外する
+function relUnderperfTier(score){
+  if(score<30) return 'excluded';
+  if(score<75) return 'caution';
+  return null;
+}
+function relUnderperfMessage(score){
+  if(score<30){
+    return {title:'🚫 買い候補対象外',
+      body:'このスコア帯はバックテストで市場平均を明確に下回りました（超過リターンが有意にマイナス）。買い候補としては表示・優先しません。'};
+  }
+  if(score<75){
+    var label = score<50 ? 'SELL帯' : 'NEUTRAL帯';
+    return {title:'⚠️ 劣後帯（'+label+'）',
+      body:'このスコア帯は、過去データ上「利益が出た割合」は高い一方、市場平均と比べた超過リターンはマイナスでした。'+
+        '「損をしにくいが、市場平均より稼ぎにくい」帯です。資金を投じるなら、より上位のスコア帯を優先してください。'};
+  }
+  return null;
+}
 
 // ── MONITOR / NOTIFICATION ──────────────────────
 var monitorTimer=null, monitorCode='', monitorInterval='1d', lastSignal='';
@@ -1377,6 +1413,19 @@ async function analyze(){
       ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためスコアを中立表示にしています'
       :(subTexts[signalClass]||'');
     document.getElementById('vsub').textContent=subTxt+'  |  スコア: '+score.toFixed(0)+'/100';
+    // スコア帯別の相対劣後注記（決算vetoで中立化している場合は別理由なので表示しない）
+    var relBadgeEl=document.getElementById('relUnderperfBadge');
+    if(relBadgeEl){
+      var relTier=(!ts.earningsVeto.active)?relUnderperfTier(score):null;
+      if(relTier){
+        var relMsg=relUnderperfMessage(score);
+        relBadgeEl.innerHTML='<b>'+relMsg.title+'</b>'+relMsg.body;
+        relBadgeEl.className='rel-underperf-badge tier-'+relTier;
+        relBadgeEl.style.display='block';
+      } else {
+        relBadgeEl.style.display='none';
+      }
+    }
     // 地合いバッジ
     var mbEl=document.getElementById('marketBadge');
     if(mbEl){
@@ -1848,6 +1897,17 @@ function renderCalendar(summaryData){
 
 // ── RENDER: 損益シミュレーター ─────────────────
 var _simCur=0,_simAtr=0,_simVClass='';
+// 口座資金・リスク許容%は毎回入力するものではなく端末設定として保持する
+var POSITION_SETTINGS_KEY='kabu_position_settings';
+function posSettingsLoad(){
+  try{
+    var v=JSON.parse(localStorage.getItem(POSITION_SETTINGS_KEY)||'null');
+    if(v&&typeof v==='object')return {capital:v.capital||1000000, riskPct:v.riskPct||1, maxConcurrent:v.maxConcurrent||5};
+  }catch(e){}
+  return {capital:1000000, riskPct:1, maxConcurrent:5};
+}
+function posSettingsSave(s){ localStorage.setItem(POSITION_SETTINGS_KEY, JSON.stringify(s)); }
+
 function renderSimulator(cur,atr,vClass){
   _simCur=cur;_simAtr=atr;_simVClass=vClass;
   var el=document.getElementById('simContent');
@@ -1855,54 +1915,94 @@ function renderSimulator(cur,atr,vClass){
   var sBuy=vClass==='buy';
   var sugSL=fmt(sBuy?cur-atr*1.5:cur+atr*1.5,0);
   var sugTP=fmt(sBuy?cur+atr*2.5:cur-atr*2.5,0);
+  var ps=posSettingsLoad();
   el.innerHTML=
     '<div class="sim-row">'+
-    '<div class="sim-input-wrap"><div class="sim-lbl">購入価格 (¥)</div><input class="sim-input" id="simEntry" type="number" value="'+fmt(cur,0)+'" step="1" inputmode="decimal"></div>'+
-    '<div class="sim-input-wrap"><div class="sim-lbl">株数</div><input class="sim-input" id="simQty" type="number" value="100" step="100" inputmode="decimal" min="1"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">口座資金 (¥)</div><input class="sim-input" id="simCapital" type="number" value="'+ps.capital+'" step="10000" inputmode="decimal"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">リスク許容 (%)</div><input class="sim-input" id="simRiskPct" type="number" value="'+ps.riskPct+'" step="0.1" inputmode="decimal"></div>'+
     '</div>'+
     '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">エントリー価格 (¥)</div><input class="sim-input" id="simEntry" type="number" value="'+fmt(cur,0)+'" step="1" inputmode="decimal"></div>'+
     '<div class="sim-input-wrap"><div class="sim-lbl">損切り価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugSL+'</span></div><input class="sim-input" id="simSL" type="number" value="'+sugSL+'" step="1" inputmode="decimal"></div>'+
-    '<div class="sim-input-wrap"><div class="sim-lbl">目標価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugTP+'</span></div><input class="sim-input" id="simTP" type="number" value="'+sugTP+'" step="1" inputmode="decimal"></div>'+
     '</div>'+
-    '<button class="sim-btn" onclick="calcSimulator()">▶ シミュレート</button>'+
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">目標価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugTP+'</span></div><input class="sim-input" id="simTP" type="number" value="'+sugTP+'" step="1" inputmode="decimal"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">同時保有上限</div><input class="sim-input" id="simMaxConcurrent" type="number" value="'+ps.maxConcurrent+'" step="1" inputmode="numeric"></div>'+
+    '</div>'+
+    '<button class="sim-btn" onclick="calcSimulator()">▶ 推奨株数を計算</button>'+
     '<div class="sim-result" id="simResult"></div>';
   show('simcard');
   setTimeout(calcSimulator,150);
 }
 
+// 推奨株数 = floor(資金 × リスク% ÷ 1株あたりリスク ÷ 100) × 100（単元100株に切り下げ）
 function calcSimulator(){
+  var capital=parseFloat(document.getElementById('simCapital').value);
+  var riskPct=parseFloat(document.getElementById('simRiskPct').value);
   var entry=parseFloat(document.getElementById('simEntry').value);
-  var qty=parseFloat(document.getElementById('simQty').value);
   var sl=parseFloat(document.getElementById('simSL').value);
   var tp=parseFloat(document.getElementById('simTP').value);
+  var maxConcurrent=parseInt(document.getElementById('simMaxConcurrent').value,10);
   var el=document.getElementById('simResult');
   if(!el)return;
-  if(isNaN(entry)||isNaN(qty)||isNaN(sl)||isNaN(tp)||entry<=0||qty<1){
+
+  if(isNaN(capital)||capital<=0||isNaN(riskPct)||riskPct<=0||isNaN(entry)||entry<=0||isNaN(sl)||isNaN(tp)||isNaN(maxConcurrent)||maxConcurrent<1){
     el.className='sim-result show';
     el.innerHTML='<div style="color:var(--red);font-size:11px;font-family:JetBrains Mono,monospace">入力値を確認してください</div>';
     return;
   }
-  var totalCost=entry*qty;
+  posSettingsSave({capital:capital, riskPct:riskPct, maxConcurrent:maxConcurrent});
+
+  var perShareRisk=Math.abs(entry-sl);
+  if(perShareRisk<=0){
+    el.className='sim-result show';
+    el.innerHTML='<div style="color:var(--red);font-size:11px;font-family:JetBrains Mono,monospace">エントリー価格と損切り価格が同じです。損切りラインを設定してください</div>';
+    return;
+  }
+  var riskAmt=capital*riskPct/100;
+  var qty=Math.floor(Math.floor(riskAmt/perShareRisk)/100)*100;
+  var insufficientLot=qty<100;
+  var requiredFunds=qty*entry;
+  var overCapital=requiredFunds>capital;
+
   var profitTP=(tp-entry)*qty;
   var lossSL=(sl-entry)*qty;
-  var riskAmt=Math.abs(lossSL);
-  var rr=riskAmt>0?Math.abs(profitTP)/riskAmt:0;
-  var riskPct=Math.abs((sl-entry)/entry*100);
+  var rr=Math.abs(tp-entry)/perShareRisk;
   var targetPct=Math.abs((tp-entry)/entry*100);
+  var riskPctActual=Math.abs((sl-entry)/entry*100);
   var rrColor=rr>=2?'var(--green)':rr>=1?'var(--yellow)':'var(--red)';
   var profColor=profitTP>=0?'var(--green)':'var(--red)';
   var lossColor=lossSL<0?'var(--red)':'var(--green)';
-  var breakeven=riskAmt>0?(rr*riskPct).toFixed(2):'--';
-  el.className='sim-result show';
-  el.innerHTML=
+
+  var openPos=openPositionsSummary();
+  var atConcurrentLimit=openPos.count>=maxConcurrent;
+
+  var html='';
+  if(insufficientLot){
+    html+='<div style="padding:8px;margin-bottom:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:11px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ リスク許容額に対し値幅が広すぎ、単元(100株)未満しか買えません。損切り幅を狭めるかリスク許容%を上げてください</div>';
+  }
+  html+=
     '<div class="sim-res-grid">'+
-    '<div class="sim-res-item"><div class="sim-res-lbl">必要資金</div><div class="sim-res-val">¥'+fmt(totalCost,0)+'</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">推奨株数</div><div class="sim-res-val" style="color:'+(insufficientLot?'var(--red)':'var(--txt)')+'">'+qty.toLocaleString()+'株</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">必要資金</div><div class="sim-res-val" style="color:'+(overCapital?'var(--red)':'var(--txt)')+'">¥'+fmt(requiredFunds,0)+'</div></div>'+
+    '<div class="sim-res-item"><div class="sim-res-lbl">リスク許容額</div><div class="sim-res-val">¥'+fmt(riskAmt,0)+'</div></div>'+
     '<div class="sim-res-item"><div class="sim-res-lbl">リスクリワード比</div><div class="sim-res-val" style="color:'+rrColor+'">'+rr.toFixed(2)+':1</div></div>'+
     '<div class="sim-res-item"><div class="sim-res-lbl">目標時 利益</div><div class="sim-res-val" style="color:'+profColor+'">'+(profitTP>=0?'+':'')+'¥'+fmt(profitTP,0)+'<span style="font-size:10px;color:var(--txt3)"> (+'+targetPct.toFixed(1)+'%)</span></div></div>'+
-    '<div class="sim-res-item"><div class="sim-res-lbl">損切り時 損失</div><div class="sim-res-val" style="color:'+lossColor+'">'+(lossSL>=0?'+':'')+'¥'+fmt(lossSL,0)+'<span style="font-size:10px;color:var(--txt3)"> (-'+riskPct.toFixed(1)+'%)</span></div></div>'+
-    '</div>'+
-    (rr>=2?'<div style="margin-top:8px;padding:8px;background:rgba(0,200,117,.08);border-radius:6px;font-size:10px;color:var(--green);font-family:JetBrains Mono,monospace">✅ RR比2以上 — 良好なリスク設定です</div>':'')+
-    (rr>0&&rr<1?'<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ RR比1未満 — 損切りが近すぎるか目標が低すぎます</div>':'');
+    '<div class="sim-res-item"><div class="sim-res-lbl">損切り時 損失</div><div class="sim-res-val" style="color:'+lossColor+'">'+(lossSL>=0?'+':'')+'¥'+fmt(lossSL,0)+'<span style="font-size:10px;color:var(--txt3)"> (-'+riskPctActual.toFixed(1)+'%)</span></div></div>'+
+    '</div>';
+  if(overCapital){
+    html+='<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ 必要資金が口座資金（¥'+fmt(capital,0)+'）を超えています</div>';
+  }
+  html+='<div style="margin-top:8px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;font-size:10px;color:var(--txt2);font-family:JetBrains Mono,monospace">'+
+    '同時保有: '+openPos.count+' / '+maxConcurrent+'銘柄'+(atConcurrentLimit?' <span style="color:var(--red)">⚠ 上限到達</span>':'')+'<br>'+
+    (openPos.riskKnownCount>0
+      ?'保有中の合計リスク額（損切り価格が記録済みの'+openPos.riskKnownCount+'件分）: ¥'+fmt(openPos.totalRisk,0)
+      :'保有中ポジションに損切り価格の記録がないため合計リスクは算出できません（取引記録時に損切り価格も入力してください）')+
+    '</div>';
+  if(rr>=2)html+='<div style="margin-top:8px;padding:8px;background:rgba(0,200,117,.08);border-radius:6px;font-size:10px;color:var(--green);font-family:JetBrains Mono,monospace">✅ RR比2以上 — 良好なリスク設定です</div>';
+  else if(rr>0&&rr<1)html+='<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ RR比1未満 — 損切りが近すぎるか目標が低すぎます</div>';
+  el.className='sim-result show';
+  el.innerHTML=html;
 }
 
 // ── RENDER: トレール損切り計算機 ─────────────────
@@ -2369,6 +2469,7 @@ function addTrade(){
   var qty=parseFloat(document.getElementById('tjQty').value);
   var entry=parseFloat(document.getElementById('tjEntry').value);
   var exitV=parseFloat(document.getElementById('tjExit').value);
+  var slV=parseFloat(document.getElementById('tjSL').value);
   var memo=(document.getElementById('tjMemo').value||'').trim();
   if(!/^\d{4}$/.test(code)){alert('4桁の銘柄コードを入力してください');return;}
   if(isNaN(entry)||entry<=0){alert('エントリー価格を入力してください');return;}
@@ -2380,14 +2481,27 @@ function addTrade(){
   arr.unshift({
     code:code, dir:dir, qty:qty, entry:entry,
     exit:isNaN(exitV)?null:exitV,
+    sl:isNaN(slV)?null:slV,
     memo:memo, ts:Date.now(), sig:sig, sigScore:sigScore
   });
   tjSave(arr);
   document.getElementById('tjCode').value='';
   document.getElementById('tjEntry').value='';
   document.getElementById('tjExit').value='';
+  document.getElementById('tjSL').value='';
   document.getElementById('tjMemo').value='';
   renderTradeJournal();
+}
+
+// 保有中（決済未記入）ポジションの集計。損切り価格が記録されている建玉のみリスク額を合算できる
+// （損切り未記入の古い記録はリスク不明として合計に含めない旨をUIで明示する）
+function openPositionsSummary(){
+  var trades=tjLoad().filter(function(t){ return t.exit==null; });
+  var withSL=trades.filter(function(t){ return t.sl!=null && !isNaN(t.sl); });
+  var totalRisk=withSL.reduce(function(sum,t){
+    return sum + Math.abs(t.entry-t.sl)*(t.qty||0);
+  },0);
+  return { count:trades.length, riskKnownCount:withSL.length, totalRisk:totalRisk };
 }
 
 function deleteTrade(ts){
@@ -2426,7 +2540,8 @@ function renderTradeJournal(){
     var sec=SECTOR_MAP[t.code]?'<span style="color:var(--txt3)"> ['+SECTOR_MAP[t.code]+']</span>':'';
     var mid='<span>IN ¥'+fmt(t.entry,1)+'</span>'+
       (t.exit!=null?'<span>OUT ¥'+fmt(t.exit,1)+'</span>':'<span class="tj-item-open">● 保有中</span>')+
-      '<span>'+fmt(t.qty,0)+'株</span>';
+      '<span>'+fmt(t.qty,0)+'株</span>'+
+      (t.exit==null&&t.sl!=null?'<span style="color:var(--txt3)">SL ¥'+fmt(t.sl,1)+'</span>':'');
     var plHtml=pl!=null?'<span class="tj-item-pl '+(pl>=0?'up':'dn')+'">'+(pl>=0?'+':'')+'¥'+fmt(pl,0)+'</span>':'';
     return '<div class="tj-item">'+
       '<div class="tj-item-top">'+
@@ -2944,6 +3059,9 @@ function renderScannerList() {
   var filtered = _scanFilter
     ? _scanData.filter(function(r){ return r.signal === _scanFilter; })
     : _scanData;
+  // ALL表示（フィルタなし）ではSTRONG SELLを買い候補一覧から除外する
+  // （バックテストで市場平均を有意に下回った帯。個別に見たい場合はSTRONG SELLフィルタから）
+  if (!_scanFilter) filtered = filtered.filter(function(r){ return r.signal !== 'STRONG SELL'; });
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="scanner-empty">該当銘柄なし</div>';
@@ -2982,9 +3100,12 @@ function renderScannerList() {
     var starTxt = inWatchlist ? '★' : '☆';
     var safeCode = r.code.replace(/'/g,"\\'");
     var safeName = (r.name||'').replace(/'/g,"\\'");
-    html += '<div class="scanner-item" onclick="openScannerStock(\'' + safeCode + '\',\'' + safeName + '\')">';
+    // NEUTRAL/SELL帯はバックテストで市場平均に有意に劣後したため、候補としては目立たせない
+    var demoted = (r.signal === 'NEUTRAL' || r.signal === 'SELL');
+    html += '<div class="scanner-item' + (demoted ? ' tier-demoted' : '') + '" onclick="openScannerStock(\'' + safeCode + '\',\'' + safeName + '\')">';
     html += '<div class="si-rank' + rankCls + '">' + rank + '</div>';
     html += '<div class="si-info"><div class="si-code">' + r.code + '</div><div class="si-name">' + (r.name||r.code) + '</div>';
+    if (demoted) html += '<div class="si-tier-note">市場平均に劣後する帯</div>';
     if (tags.length > 0) html += '<div class="si-badges">' + tags.map(function(t){ return '<span class="si-tag">'+t+'</span>'; }).join('') + '</div>';
     html += '</div>';
     html += '<div class="si-score-wrap"><div class="si-score-num">' + r.score + '</div><div class="si-score-lbl">SCORE</div></div>';

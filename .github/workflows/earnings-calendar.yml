@@ -1,0 +1,28 @@
+name: 決算日キャッシュ更新（週次自動実行）
+
+# 日次スキャナー(worker.js)がSubrequest数上限のため毎回は取得できない決算日を、
+# 週次でSupabase(earnings_calendar)に事前キャッシュしておく。
+# 決算日は数ヶ月単位でしか変わらないため週次更新で十分。
+on:
+  schedule:
+    - cron: '17 20 * * 1'  # 毎週月曜 20:17 UTC（日本時間 月曜 翌5:17）
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 決算日キャッシュ更新
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/fetch-earnings-calendar.mjs

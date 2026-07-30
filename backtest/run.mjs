@@ -39,6 +39,15 @@ const CONFIG = {
   bootstrapIters: Math.round(num(process.env.BT_BOOTSTRAP_ITERS, 2000)),
   fetchDelayMs: 1500,    // Worker経由リクエストの間隔（Cloudflare/Yahoo双方への配慮）
   maxRetries: 4,          // 429/5xx受信時の再試行回数（指数バックオフ）
+  blockLength: Math.round(num(process.env.BT_BLOCK_LENGTH, 40)),
+  // ブートストラップのブロック長（営業日）。20営業日ホライズンのリターンは
+  // 連続する最大19営業日が同じ価格変動を共有し強い時系列相関を持つため、
+  // それより余裕を持った長さの連続ブロック単位でリサンプリングする。
+  // 合成データでの検証: ブロック長無し（単純日付リサンプリング）は真に無相関な
+  // データに対して95%CIが誤って0を除外する頻度が30試行中17回（本来5%程度のはずが57%）
+  // という深刻な過大検出を起こしていた。ブロック長40では50試行中7回（14%）まで改善
+  // （ブロックブートストラップの既知の限界により完全に5%には収束しないが、
+  // 大幅な改善であり、単純リサンプリングは使うべきではない）
 };
 
 const BUCKETS = ['0-30', '30-50', '50-75', '75-90', '90-100'];
@@ -255,9 +264,11 @@ function percentileCI(values) {
   return [round(lo, 3), round(hi, 3)];
 }
 
-// ── 日付クラスタ・ブートストラップ用の事前集計 ───────────────────────────────
+// ── 移動ブロック・ブートストラップ用の事前集計 ───────────────────────────────
 // 素朴なt検定は使わない：20日リターンの時系列重複と横断面の相関で2重に独立性が
-// 崩れているため、日付単位でリサンプリングするクラスタ・ブートストラップを使う。
+// 崩れているため、日付を単位に集計した上で、連続ブロック単位でリサンプリングする
+// 移動ブロック・ブートストラップを使う（横断面の相関は日付単位の集計で、
+// 時系列の重複はブロック化で、それぞれ別々に対処する）。
 // ボトルネック回避のため、生の行を毎回スキャンせず日付ごとにあらかじめ集計しておく。
 function buildDateStats(allRows) {
   const stats = new Map();
@@ -290,13 +301,30 @@ function buildDateStats(allRows) {
   return stats;
 }
 
-function bootstrapBucketCI(dateList, dateStats, bucket, hz, iters) {
+// 移動ブロック・ブートストラップ: 独立に日付を1件ずつ抽選すると、20営業日ホライズンの
+// リターンが連続する最大19営業日にわたって同じ価格変動を共有している時系列相関を
+// 無視してしまい、実効サンプル数を過大評価する（信頼区間が実際より狭くなり、
+// 本来有意でないものを有意と誤判定しうる）。連続したブロック単位で復元抽出することで、
+// ブロック内の時系列構造を保持したまま、ブロック間でのみ独立性を仮定する
+function buildBlockedDateSequence(dateList, blockLength) {
   const n = dateList.length;
+  const maxStart = Math.max(0, n - blockLength);
+  const seq = [];
+  while (seq.length < n) {
+    const start = Math.floor(Math.random() * (maxStart + 1));
+    for (let i = start; i < Math.min(start + blockLength, n) && seq.length < n; i++) {
+      seq.push(dateList[i]);
+    }
+  }
+  return seq;
+}
+
+function bootstrapBucketCI(dateList, dateStats, bucket, hz, iters) {
   const means = [];
   for (let iter = 0; iter < iters; iter++) {
+    const seq = buildBlockedDateSequence(dateList, CONFIG.blockLength);
     let sum = 0, count = 0;
-    for (let k = 0; k < n; k++) {
-      const d = dateList[(Math.random() * n) | 0];
+    for (const d of seq) {
       const st = dateStats.get(d).buckets[bucket][hz];
       sum += st.sum; count += st.count;
     }
@@ -306,12 +334,11 @@ function bootstrapBucketCI(dateList, dateStats, bucket, hz, iters) {
 }
 
 function bootstrapVerdictGroupCI(dateList, dateStats, hz, iters) {
-  const n = dateList.length;
   const means = [];
   for (let iter = 0; iter < iters; iter++) {
+    const seq = buildBlockedDateSequence(dateList, CONFIG.blockLength);
     let sum = 0, count = 0;
-    for (let k = 0; k < n; k++) {
-      const d = dateList[(Math.random() * n) | 0];
+    for (const d of seq) {
       const st = dateStats.get(d).verdictGroup[hz];
       sum += st.sum; count += st.count;
     }
@@ -321,12 +348,11 @@ function bootstrapVerdictGroupCI(dateList, dateStats, hz, iters) {
 }
 
 function bootstrapItemDiffCI(dateList, dateStats, col, iters) {
-  const n = dateList.length;
   const diffs = [];
   for (let iter = 0; iter < iters; iter++) {
+    const seq = buildBlockedDateSequence(dateList, CONFIG.blockLength);
     let sumPos = 0, cntPos = 0, sumNeg = 0, cntNeg = 0;
-    for (let k = 0; k < n; k++) {
-      const d = dateList[(Math.random() * n) | 0];
+    for (const d of seq) {
       const it = dateStats.get(d).items[col];
       sumPos += it.pos.sum; cntPos += it.pos.count;
       sumNeg += it.neg.sum; cntNeg += it.neg.count;
@@ -540,6 +566,7 @@ function renderMarkdown(report) {
   lines.push(`- 観測数: ${report.coverage.totalObservations}件`);
   lines.push(`- コスト前提: 片道手数料${report.config.feeBpsOneWay}bps / 片道スリッページ${report.config.slippageBpsOneWay}bps / 譲渡益税${report.config.taxRatePct}%（利益時のみ）`);
   lines.push(`- スコア⑧（材料・アナリスト）: ${report.coverage.scoredItems}`);
+  lines.push(`- 統計的有意性判定: 移動ブロック・ブートストラップ（ブロック長${report.config.blockLength}営業日、${report.config.bootstrapIters}回試行）。20営業日リターンの重複窓による時系列相関を考慮`);
   lines.push('');
   lines.push('## 判定');
   lines.push('');

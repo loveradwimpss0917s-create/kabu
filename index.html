@@ -3056,9 +3056,18 @@ function loadScanner(force) {
 function renderScannerList() {
   var list = document.getElementById('scannerList');
   if (!list) return;
+  // DB側に(scan_date, code)の重複行が残っている場合の防御的な重複除去
+  // （スコアが同じ場合は先勝ちでよい。API側はscore.descで返すため実質同一内容）
+  var seenCodes = {};
+  var deduped = _scanData.filter(function(r){
+    if (seenCodes[r.code]) return false;
+    seenCodes[r.code] = true;
+    return true;
+  });
+
   var filtered = _scanFilter
-    ? _scanData.filter(function(r){ return r.signal === _scanFilter; })
-    : _scanData;
+    ? deduped.filter(function(r){ return r.signal === _scanFilter; })
+    : deduped;
   // ALL表示（フィルタなし）ではSTRONG SELLを買い候補一覧から除外する
   // （バックテストで市場平均を有意に下回った帯。個別に見たい場合はSTRONG SELLフィルタから）
   if (!_scanFilter) filtered = filtered.filter(function(r){ return r.signal !== 'STRONG SELL'; });

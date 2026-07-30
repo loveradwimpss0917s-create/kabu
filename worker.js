@@ -332,12 +332,24 @@ async function handleScanner(request, env, url) {
       });
     }
 
-    let q = `${supaUrl}/rest/v1/scan_results?scan_date=eq.${latestDate}&order=score.desc&limit=${limit}`;
+    // DB側に(scan_date, code)の重複行が残っている可能性があるため、必要数より多めに取得してから
+    // コード単位で重複除去する（score.desc順なので各コードの最高スコア行が残る）
+    const fetchLimit = Math.min(limit * 3, 300);
+    let q = `${supaUrl}/rest/v1/scan_results?scan_date=eq.${latestDate}&order=score.desc&limit=${fetchLimit}`;
     if (signal) q += `&signal=eq.${encodeURIComponent(signal)}`;
 
     const res = await fetch(q, { headers: anonHeaders });
     const data = await res.json();
-    return new Response(JSON.stringify({ results: Array.isArray(data) ? data : [], date: latestDate }), {
+    const rows = Array.isArray(data) ? data : [];
+    const seen = new Set();
+    const deduped = [];
+    for (const r of rows) {
+      if (seen.has(r.code)) continue;
+      seen.add(r.code);
+      deduped.push(r);
+      if (deduped.length >= limit) break;
+    }
+    return new Response(JSON.stringify({ results: deduped, date: latestDate }), {
       status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }
     });
   } catch (e) {

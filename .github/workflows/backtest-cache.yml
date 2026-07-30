@@ -1,0 +1,54 @@
+name: バックテスト用ユニバース・キャッシュ構築（研究用・手動実行）
+
+# GitHub の Actions タブから手動起動する（iPadのブラウザで完結、CLI不要）。
+# Cloudflare Workersのデプロイ経路には一切関与しない独立ジョブ。
+#
+# 使い方:
+#   1. まず migrations/003_bt_cache.sql をSupabase SQL Editorで一度だけ実行しておく
+#   2. リポジトリのSecretsに SUPABASE_SERVICE_KEY を登録しておく
+#   3. このワークフローを step=universe で1回実行する（数十秒で完了）
+#   4. このワークフローを step=cache で実行する（3,770銘柄分の取得に数十分〜。
+#      時間予算内に終わらなければ「残りは次回」と表示されるので、
+#      終わるまで step=cache を何度か再実行する）
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: '実行内容'
+        required: true
+        type: choice
+        options:
+          - universe
+          - cache
+        default: 'cache'
+      time_budget_min:
+        description: '(cacheのみ) 1回の実行の時間予算（分）'
+        required: false
+        default: '170'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ユニバース構築（bt_universe）
+        if: ${{ inputs.step == 'universe' }}
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node backtest/build-universe.mjs
+
+      - name: 価格キャッシュ取得（bt_prices_cache）
+        if: ${{ inputs.step == 'cache' }}
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BT_TIME_BUDGET_MIN: ${{ inputs.time_budget_min }}
+        run: node backtest/fetch-cache.mjs

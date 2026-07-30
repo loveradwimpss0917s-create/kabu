@@ -24,3 +24,13 @@ create table bt_prices_cache (
 );
 
 create index bt_prices_cache_status_idx on bt_prices_cache(status);
+
+-- RLS: 読み取りは誰でも可（backtest/run.mjsがanonキーで読む）。
+-- 書き込みはSUPABASE_SERVICE_KEY（service_role、RLSを常にバイパスする）を使う
+-- build-universe.mjs / fetch-cache.mjs のみが行うため、INSERT/UPDATE/DELETEの
+-- ポリシーは意図的に作らない（anonキーでは書き込めない）
+alter table bt_universe enable row level security;
+alter table bt_prices_cache enable row level security;
+
+create policy public_select on bt_universe for select using (true);
+create policy public_select on bt_prices_cache for select using (true);

@@ -1,0 +1,50 @@
+name: 仮説検証 セクター相対強度（研究用・手動実行）
+
+# Step3-(3): セクター相対強度の検証。直近の業種トレイリングリターンで
+# 銘柄を三分位(top/mid/bottom)に分け、強い業種の銘柄が市場平均を
+# 上回り続けるかを検証する。事前に fetch-sector-map.yml で
+# sector_map を構築しておく必要がある。
+on:
+  workflow_dispatch:
+    inputs:
+      sector_lookback:
+        description: '業種トレイリングリターン算出期間（営業日。既定60≈3ヶ月）'
+        required: false
+        default: '60'
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '2000'
+
+permissions:
+  contents: write
+
+jobs:
+  sector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: セクター相対強度検証実行
+        env:
+          BT_SECTOR_LOOKBACK: ${{ inputs.sector_lookback }}
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/hypothesis-sector.mjs
+
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: セクター相対強度検証結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

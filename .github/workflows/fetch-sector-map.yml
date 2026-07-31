@@ -1,0 +1,35 @@
+name: 業種分類キャッシュ構築（研究用・手動実行）
+
+# Step3-(3) セクター相対強度の検証で使う銘柄→業種マッピングをSupabase(sector_map)に構築する。
+# 業種分類はほぼ変化しないため低頻度（基本は1回、必要に応じて再実行）でよい。
+# 使い方:
+#   1. migrations/005_sector_map.sql をSupabase SQL Editorで一度だけ実行しておく
+#   2. このワークフローを実行する（約3,600銘柄で数十分〜。時間予算内に終わらなければ
+#      「残りは次回」と表示されるので、終わるまで何度か再実行する）
+on:
+  workflow_dispatch:
+    inputs:
+      time_budget_min:
+        description: '1回の実行の時間予算（分）'
+        required: false
+        default: '170'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 業種分類キャッシュ更新
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SM_TIME_BUDGET_MIN: ${{ inputs.time_budget_min }}
+        run: node scripts/fetch-sector-map.mjs

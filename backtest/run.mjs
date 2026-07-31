@@ -505,6 +505,19 @@ async function main() {
   const skippedStocks = [];
   let processed = 0;
   const PAGE_SIZE = 100;
+  // 異常値検出用: |ret5|または|ret20|が突出して大きい観測を上位N件だけ保持する
+  // （分割・併合調整の不整合等でexitPrice/entryが極端な比になる事故を検出するため。
+  //  平均は外れ値1件で数万%動きうるが、中央値には表れないため見逃しやすい）
+  const TOP_OUTLIERS_N = 30;
+  const topOutliers = [];
+  function trackOutlier(r) {
+    const mag = Math.max(Math.abs(r.ret5 || 0), Math.abs(r.ret20 || 0));
+    if (topOutliers.length < TOP_OUTLIERS_N || mag > topOutliers[topOutliers.length - 1]._mag) {
+      topOutliers.push({ code: r.code, date: r.date, ret1: round(r.ret1, 2), ret5: round(r.ret5, 2), ret20: round(r.ret20, 2), _mag: mag });
+      topOutliers.sort((a, b) => b._mag - a._mag);
+      if (topOutliers.length > TOP_OUTLIERS_N) topOutliers.length = TOP_OUTLIERS_N;
+    }
+  }
   for await (const { code, series } of iterateCachedSeries(PAGE_SIZE)) {
     processed++;
     const name = nameMap.get(code) || code;
@@ -513,12 +526,18 @@ async function main() {
       if (!series) { skippedStocks.push({ code, name, reason: 'cache_error' }); continue; }
       const rows = simulateStock(code, series);
       if (!rows.length) skippedStocks.push({ code, name, reason: 'insufficient_data' });
-      else allRows.push(...rows);
+      else { for (const r of rows) trackOutlier(r); allRows.push(...rows); }
     } catch (e) {
       skippedStocks.push({ code, name, reason: e.message });
     }
   }
   console.log(`キャッシュから読み込み完了: ${processed}銘柄（有効${processed - skippedStocks.length} / スキップ${skippedStocks.length}）`);
+  if (topOutliers.length) {
+    console.log(`\n異常値上位${Math.min(10, topOutliers.length)}件（|ret5|または|ret20|が大きい順）:`);
+    for (const o of topOutliers.slice(0, 10)) {
+      console.log(`  ${o.code} ${o.date}: ret1=${o.ret1}% ret5=${o.ret5}% ret20=${o.ret20}%`);
+    }
+  }
 
   if (!allRows.length) {
     console.error('有効なデータが1件もありません。先に backtest/build-universe.mjs と backtest/fetch-cache.mjs を実行してキャッシュを構築してください。');
@@ -551,7 +570,8 @@ async function main() {
     coverage: {
       totalObservations: allRows.length,
       skippedStocks,
-      scoredItems: '①〜⑦のみ（⑧材料・アナリストはsummaryData未使用のため検証不能）'
+      scoredItems: '①〜⑦のみ（⑧材料・アナリストはsummaryData未使用のため検証不能）',
+      topOutliers: topOutliers.map(({ _mag, ...rest }) => rest)
     },
     buckets: BUCKETS.map(b => buckets[b]),
     robustness,

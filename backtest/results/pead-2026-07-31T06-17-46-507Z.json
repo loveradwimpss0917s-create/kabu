@@ -1,0 +1,95 @@
+{
+  "runId": "2026-07-31T06-17-46-507Z",
+  "hypothesis": "PEAD（決算後ドリフト）のサニティチェック — 測定環境が既知の継続性アノマリーを検出できるかの確認",
+  "dataLimitation": "実際の決算発表日・サプライズ(SUE)データは使用していない代理指標による検証。「価格急変+出来高急増」を決算サプライズの代理として使うため、決算以外の材料によるジャンプも混入する。したがって本結果は「決算後ドリフトの証明」ではなく「この測定環境が継続性アノマリーを拾えるかの確認」に限定して解釈すること。",
+  "config": {
+    "horizons": [
+      1,
+      5,
+      20
+    ],
+    "volLookback": 20,
+    "retThresholdPct": 5,
+    "volRatioThreshold": 2,
+    "bootstrapIters": 2000,
+    "blockLength": 40
+  },
+  "universe": {
+    "stockCount": 3658,
+    "eventStockCount": 3545
+  },
+  "coverage": {
+    "totalEvents": 156202,
+    "skippedStocks": [],
+    "implausibleReturnsExcluded": 18
+  },
+  "positiveSurprise": {
+    "n": 93614,
+    "horizons": {
+      "1d": {
+        "n": 93614,
+        "signedExcessMeanPct": -0.379,
+        "signedExcessMedianPct": -0.531,
+        "signedExcessCI95": [
+          -0.424,
+          -0.326
+        ]
+      },
+      "5d": {
+        "n": 93614,
+        "signedExcessMeanPct": -0.822,
+        "signedExcessMedianPct": -1.626,
+        "signedExcessCI95": [
+          -0.963,
+          -0.661
+        ]
+      },
+      "20d": {
+        "n": 93614,
+        "signedExcessMeanPct": -1.016,
+        "signedExcessMedianPct": -3.062,
+        "signedExcessCI95": [
+          -1.355,
+          -0.607
+        ]
+      }
+    }
+  },
+  "negativeSurprise": {
+    "n": 62588,
+    "horizons": {
+      "1d": {
+        "n": 62588,
+        "signedExcessMeanPct": 0.196,
+        "signedExcessMedianPct": 0.225,
+        "signedExcessCI95": [
+          0.13,
+          0.253
+        ]
+      },
+      "5d": {
+        "n": 62588,
+        "signedExcessMeanPct": 0.269,
+        "signedExcessMedianPct": 0.717,
+        "signedExcessCI95": [
+          0.072,
+          0.479
+        ]
+      },
+      "20d": {
+        "n": 62588,
+        "signedExcessMeanPct": 0.435,
+        "signedExcessMedianPct": 1.812,
+        "signedExcessCI95": [
+          -0.069,
+          0.958
+        ]
+      }
+    }
+  },
+  "verdict": {
+    "conclusion": "PEAD_PROXY_NOT_DETECTED",
+    "criterion_positiveSurpriseContinuation20d": false,
+    "criterion_negativeSurpriseContinuation20d": false
+  }
+}

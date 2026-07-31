@@ -1,0 +1,185 @@
+{
+  "runId": "2026-07-31T15-56-48-786Z",
+  "hypothesis": "セクター相対強度 — 直近3ヶ月のトレイリングリターンが高い業種に属する銘柄は市場平均を上回り続けるか",
+  "dataLimitation": "Yahoo Finance(assetProfile)の業種分類を使用。ETF等を除いた普通株のみだが、業種粒度はYahooの分類基準に依存し、東証33業種分類とは一致しない。",
+  "config": {
+    "horizons": [
+      1,
+      5,
+      20
+    ],
+    "sectorLookback": 60,
+    "minStocksPerSectorDate": 3,
+    "bootstrapIters": 2000,
+    "blockLength": 40
+  },
+  "universe": {
+    "stockCount": 3658,
+    "sectorCount": 11
+  },
+  "coverage": {
+    "totalObservations": 7721708,
+    "noSectorCount": 96,
+    "skippedStocks": 22
+  },
+  "tercile": [
+    {
+      "tercile": "bottom",
+      "horizons": {
+        "1d": {
+          "n": 2377846,
+          "excessMeanPct": 0.001,
+          "excessCI95": [
+            -0.005,
+            0.007
+          ]
+        },
+        "5d": {
+          "n": 2377846,
+          "excessMeanPct": 0,
+          "excessCI95": [
+            -0.04,
+            0.045
+          ]
+        },
+        "20d": {
+          "n": 2377846,
+          "excessMeanPct": -0.009,
+          "excessCI95": [
+            -0.153,
+            0.137
+          ]
+        }
+      }
+    },
+    {
+      "tercile": "mid",
+      "horizons": {
+        "1d": {
+          "n": 2828952,
+          "excessMeanPct": 0.001,
+          "excessCI95": [
+            -0.004,
+            0.006
+          ]
+        },
+        "5d": {
+          "n": 2828952,
+          "excessMeanPct": 0.005,
+          "excessCI95": [
+            -0.019,
+            0.027
+          ]
+        },
+        "20d": {
+          "n": 2828952,
+          "excessMeanPct": 0.025,
+          "excessCI95": [
+            -0.062,
+            0.1
+          ]
+        }
+      }
+    },
+    {
+      "tercile": "top",
+      "horizons": {
+        "1d": {
+          "n": 2514910,
+          "excessMeanPct": -0.002,
+          "excessCI95": [
+            -0.008,
+            0.004
+          ]
+        },
+        "5d": {
+          "n": 2514910,
+          "excessMeanPct": -0.005,
+          "excessCI95": [
+            -0.042,
+            0.032
+          ]
+        },
+        "20d": {
+          "n": 2514910,
+          "excessMeanPct": -0.02,
+          "excessCI95": [
+            -0.132,
+            0.099
+          ]
+        }
+      }
+    }
+  ],
+  "spread": {
+    "description": "top(上位業種)-bottom(下位業種)の超過リターン差",
+    "horizons": {
+      "1d": {
+        "meanPct": -0.003,
+        "CI95": [
+          -0.015,
+          0.01
+        ]
+      },
+      "5d": {
+        "meanPct": -0.006,
+        "CI95": [
+          -0.093,
+          0.075
+        ]
+      },
+      "20d": {
+        "meanPct": -0.012,
+        "CI95": [
+          -0.265,
+          0.232
+        ]
+      }
+    }
+  },
+  "robustness": {
+    "spearmanRho20d": -0.5,
+    "subPeriods": [
+      {
+        "label": "Y1",
+        "start": "2016-10-28",
+        "end": "2019-12-24",
+        "n": 794,
+        "spreadMeanPct20d": 0.162
+      },
+      {
+        "label": "Y2",
+        "start": "2019-12-25",
+        "end": "2023-03-30",
+        "n": 794,
+        "spreadMeanPct20d": -0.467
+      },
+      {
+        "label": "Y3",
+        "start": "2023-03-31",
+        "end": "2026-06-30",
+        "n": 794,
+        "spreadMeanPct20d": 0.268
+      }
+    ]
+  },
+  "verdict": {
+    "criterion1_spread20dCI95LowerAboveZero": false,
+    "criterion1_detail": {
+      "spreadCI95_20d": [
+        -0.265,
+        0.232
+      ]
+    },
+    "criterion2_monotonicitySpearmanAtLeast08": false,
+    "criterion2_detail": {
+      "rho20d": -0.5
+    },
+    "criterion3_signPositiveIn2of3SubPeriods": true,
+    "criterion3_detail": {
+      "positiveSubPeriods": 2,
+      "of": 3
+    },
+    "conclusion": "EDGE_NOT_CONFIRMED"
+  }
+}

@@ -141,6 +141,15 @@ function extractItemPoints(details) {
 
 function dateStr(epochSec) { return new Date(epochSec * 1000).toISOString().slice(0, 10); }
 
+// TSE上場銘柄が正当な値動きだけで20営業日に達しうる上限をはるかに超えた閾値。
+// 上場廃止（完全子会社化に伴うスクイーズアウト等）に伴うYahoo側の調整後終値の
+// 不整合（例: 8303 新生銀行、2023年9月の非公開化）で、比率ベースの分割調整
+// （buildAdjustedSeries）が数百万〜数十億%という非現実的なリターンを生成する
+// ことを実データで確認した。これはノイズではなく明確なデータ異常のため、
+// 「外れ値として丸める」のではなく該当観測を除外し、除外件数を透明に報告する
+const MAX_PLAUSIBLE_RET_PCT = 1000;
+let implausibleExcluded = 0;
+
 // ── 1銘柄分のルックアヘッドなしシミュレーション ──────────────────────────────
 // 分割・配当調整後の系列（buildAdjustedSeries）を使い、i日目までのデータのみ
 // （slice(0, i+1)）でスコアを計算する。エントリーは翌営業日の始値。
@@ -167,7 +176,9 @@ function simulateStock(code, chart) {
     for (const hz of CONFIG.horizons) {
       const exitPrice = c[i + hz];
       if (!(exitPrice > 0)) { ok = false; break; }
-      row['ret' + hz] = (exitPrice - entry) / entry * 100;
+      const ret = (exitPrice - entry) / entry * 100;
+      if (Math.abs(ret) > MAX_PLAUSIBLE_RET_PCT) { ok = false; implausibleExcluded++; break; }
+      row['ret' + hz] = ret;
     }
     if (ok) rows.push(row);
   }
@@ -570,6 +581,10 @@ async function main() {
     coverage: {
       totalObservations: allRows.length,
       skippedStocks,
+      implausibleReturnsExcluded: {
+        count: implausibleExcluded,
+        note: `|リターン|が${MAX_PLAUSIBLE_RET_PCT}%を超えた観測を除外（上場廃止に伴う調整後終値の不整合等、データ異常と判断）`
+      },
       scoredItems: '①〜⑦のみ（⑧材料・アナリストはsummaryData未使用のため検証不能）',
       topOutliers: topOutliers.map(({ _mag, ...rest }) => rest)
     },
@@ -578,6 +593,10 @@ async function main() {
     itemAnalysis,
     verdict
   };
+
+  if (implausibleExcluded > 0) {
+    console.log(`\n異常リターン除外: ${implausibleExcluded}件（|リターン|>${MAX_PLAUSIBLE_RET_PCT}%。上場廃止時の調整後終値不整合等）`);
+  }
 
   const outDir = `${__dirname}/results`;
   mkdirSync(outDir, { recursive: true });
@@ -602,6 +621,9 @@ function renderMarkdown(report) {
   lines.push(`- 対象銘柄: ${report.universe.scoredStockCount} / ${report.universe.stockCount}（スキップ ${report.coverage.skippedStocks.length}件）`);
   if (report.universe.source) lines.push(`- ユニバース: ${report.universe.source}`);
   lines.push(`- 観測数: ${report.coverage.totalObservations}件`);
+  if (report.coverage.implausibleReturnsExcluded && report.coverage.implausibleReturnsExcluded.count > 0) {
+    lines.push(`- 異常リターン除外: ${report.coverage.implausibleReturnsExcluded.count}件（${report.coverage.implausibleReturnsExcluded.note}）`);
+  }
   lines.push(`- コスト前提: 片道手数料${report.config.feeBpsOneWay}bps / 片道スリッページ${report.config.slippageBpsOneWay}bps / 譲渡益税${report.config.taxRatePct}%（利益時のみ）`);
   lines.push(`- スコア⑧（材料・アナリスト）: ${report.coverage.scoredItems}`);
   lines.push(`- 統計的有意性判定: 移動ブロック・ブートストラップ（ブロック長${report.config.blockLength}営業日、${report.config.bootstrapIters}回試行）。20営業日リターンの重複窓による時系列相関を考慮`);

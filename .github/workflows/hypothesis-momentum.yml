@@ -1,0 +1,54 @@
+name: 仮説検証 モメンタム12-1（研究用・手動実行）
+
+# Step3-(2): クロスセクショナル・モメンタム(12-1)の検証。
+# 過去12ヶ月(直近1ヶ月除く)のリターンで銘柄を分位点(Q1〜Q5)に分け、
+# 上位(winner)が市場平均を上回り続けるかを検証する。
+on:
+  workflow_dispatch:
+    inputs:
+      lookback_bars:
+        description: 'モメンタム参照期間（営業日。既定252=12ヶ月）'
+        required: false
+        default: '252'
+      skip_bars:
+        description: '直近除外期間（営業日。既定21=1ヶ月）'
+        required: false
+        default: '21'
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '2000'
+
+permissions:
+  contents: write
+
+jobs:
+  momentum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: モメンタム(12-1)検証実行
+        env:
+          BT_MOM_LOOKBACK: ${{ inputs.lookback_bars }}
+          BT_MOM_SKIP: ${{ inputs.skip_bars }}
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/hypothesis-momentum.mjs
+
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: モメンタム(12-1)検証結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

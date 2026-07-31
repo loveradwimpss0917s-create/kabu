@@ -1,0 +1,54 @@
+name: 仮説検証 PEAD（研究用・手動実行）
+
+# Step3-(1): PEAD（決算後ドリフト）のサニティチェック。
+# 実際の決算日データではなく「価格急変+出来高急増」を代理指標として使う
+# （詳細は backtest/hypothesis-pead.mjs 冒頭のコメントを参照）。
+on:
+  workflow_dispatch:
+    inputs:
+      ret_threshold:
+        description: 'イベント判定: |当日リターン|の閾値(%)'
+        required: false
+        default: '5'
+      vol_threshold:
+        description: 'イベント判定: 出来高が平常の何倍以上か'
+        required: false
+        default: '2.0'
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '2000'
+
+permissions:
+  contents: write
+
+jobs:
+  pead:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: PEADサニティチェック実行
+        env:
+          BT_PEAD_RET_THRESHOLD: ${{ inputs.ret_threshold }}
+          BT_PEAD_VOL_THRESHOLD: ${{ inputs.vol_threshold }}
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/hypothesis-pead.mjs
+
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: PEADサニティチェック結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

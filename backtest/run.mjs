@@ -187,36 +187,38 @@ function afterTaxPct(grossPct) {
 }
 
 // ── ユニバース平均ベンチマーク（同日・同ホライズンの全銘柄等加重平均） ───────
-function computeBenchmarkAndExcess(allRows) {
+// 7,000万件規模になると、行ごとにmkt/net/afterTax/excessの4項目×3ホライズン=12
+// フィールドを書き戻す方式はメモリを倍以上に膨らませてOOMを起こす（実際に
+// 3,576銘柄・710万観測で発生）。そのためベンチマークはMapとしてのみ保持し、
+// net/afterTax/excessは必要な箇所で都度computeする（下のnetOf/afterTaxOf/excessOf）
+function computeBenchmark(allRows) {
   const byDate = new Map();
   for (const r of allRows) {
-    if (!byDate.has(r.date)) byDate.set(r.date, []);
-    byDate.get(r.date).push(r);
+    let s = byDate.get(r.date);
+    if (!s) { s = {}; for (const hz of CONFIG.horizons) s[hz] = { sum: 0, count: 0 }; byDate.set(r.date, s); }
+    for (const hz of CONFIG.horizons) {
+      const v = r['ret' + hz];
+      if (v != null) { s[hz].sum += v; s[hz].count++; }
+    }
   }
   const benchmark = new Map();
-  for (const [date, rows] of byDate) {
+  for (const [date, s] of byDate) {
     const b = {};
-    for (const hz of CONFIG.horizons) {
-      const vals = rows.map(r => r['ret' + hz]).filter(v => v != null);
-      b[hz] = vals.length ? vals.reduce((a, x) => a + x, 0) / vals.length : null;
-    }
+    for (const hz of CONFIG.horizons) b[hz] = s[hz].count ? s[hz].sum / s[hz].count : null;
     benchmark.set(date, b);
   }
-  for (const r of allRows) {
-    const b = benchmark.get(r.date);
-    for (const hz of CONFIG.horizons) {
-      const gross = r['ret' + hz];
-      const net = frictionOnlyPct(gross);
-      const bm = b ? b[hz] : null;
-      r['mkt' + hz] = bm;
-      r['net' + hz] = net;
-      r['afterTax' + hz] = afterTaxPct(gross);
-      // 判定に使う超過リターンは「摩擦控除後・税引前」を使う（税引後を使うとベンチマークとの
-      // 比較が不当になる。ベンチマークにも同じ税がかかるため）
-      r['excess' + hz] = (bm != null) ? net - bm : null;
-    }
-  }
-  return byDate;
+  return benchmark;
+}
+
+function netOf(r, hz) { const g = r['ret' + hz]; return g == null ? null : frictionOnlyPct(g); }
+function afterTaxOf(r, hz) { const g = r['ret' + hz]; return g == null ? null : afterTaxPct(g); }
+function mktOf(r, hz, benchmark) { const b = benchmark.get(r.date); return b ? b[hz] : null; }
+// 判定に使う超過リターンは「摩擦控除後・税引前」を使う（税引後を使うとベンチマークとの
+// 比較が不当になる。ベンチマークにも同じ税がかかるため）
+function excessOf(r, hz, benchmark) {
+  const net = netOf(r, hz);
+  const bm = mktOf(r, hz, benchmark);
+  return (net != null && bm != null) ? net - bm : null;
 }
 
 // ── 統計ヘルパー ─────────────────────────────────────────────────────────────
@@ -281,7 +283,7 @@ function percentileCI(values) {
 // 移動ブロック・ブートストラップを使う（横断面の相関は日付単位の集計で、
 // 時系列の重複はブロック化で、それぞれ別々に対処する）。
 // ボトルネック回避のため、生の行を毎回スキャンせず日付ごとにあらかじめ集計しておく。
-function buildDateStats(allRows) {
+function buildDateStats(allRows, benchmark) {
   const stats = new Map();
   for (const r of allRows) {
     let s = stats.get(r.date);
@@ -294,12 +296,12 @@ function buildDateStats(allRows) {
     }
     const isB4B5 = r.bucket === '75-90' || r.bucket === '90-100';
     for (const hz of CONFIG.horizons) {
-      const ev = r['excess' + hz];
+      const ev = excessOf(r, hz, benchmark);
       if (ev == null) continue;
       s.buckets[r.bucket][hz].sum += ev; s.buckets[r.bucket][hz].count++;
       if (isB4B5) { s.verdictGroup[hz].sum += ev; s.verdictGroup[hz].count++; }
     }
-    const e20 = r.excess20;
+    const e20 = excessOf(r, 20, benchmark);
     if (e20 != null) {
       for (const col of ITEM_COLS) {
         const v = r[col];
@@ -375,7 +377,7 @@ function bootstrapItemDiffCI(dateList, dateStats, col, iters) {
 
 // ── 集計 ─────────────────────────────────────────────────────────────────────
 
-function aggregateBuckets(allRows, dateList, dateStats) {
+function aggregateBuckets(allRows, dateList, dateStats, benchmark) {
   const result = {};
   for (const b of BUCKETS) {
     const rows = allRows.filter(r => r.bucket === b);
@@ -385,11 +387,11 @@ function aggregateBuckets(allRows, dateList, dateStats) {
     const horizons = {};
     for (const hz of CONFIG.horizons) {
       const gross = rows.map(r => r['ret' + hz]).filter(v => v != null);
-      const net = rows.map(r => r['net' + hz]).filter(v => v != null);
-      const netSorted = rowsByDate.map(r => r['net' + hz]).filter(v => v != null);
-      const afterTax = rows.map(r => r['afterTax' + hz]).filter(v => v != null);
-      const mkt = rows.map(r => r['mkt' + hz]).filter(v => v != null);
-      const excess = rows.map(r => r['excess' + hz]).filter(v => v != null);
+      const net = rows.map(r => netOf(r, hz)).filter(v => v != null);
+      const netSorted = rowsByDate.map(r => netOf(r, hz)).filter(v => v != null);
+      const afterTax = rows.map(r => afterTaxOf(r, hz)).filter(v => v != null);
+      const mkt = rows.map(r => mktOf(r, hz, benchmark)).filter(v => v != null);
+      const excess = rows.map(r => excessOf(r, hz, benchmark)).filter(v => v != null);
       const winRate = gross.length ? gross.filter(v => v > 0).length / gross.length * 100 : null;
       const netWinRate = net.length ? net.filter(v => v > 0).length / net.length * 100 : null;
       const eq = equityStats(netSorted);
@@ -410,7 +412,7 @@ function aggregateBuckets(allRows, dateList, dateStats) {
   return result;
 }
 
-function computeRobustness(bucketResults, allRows) {
+function computeRobustness(bucketResults, allRows, benchmark) {
   const spearman = {};
   for (const hz of CONFIG.horizons) {
     const means = BUCKETS.map(b => bucketResults[b].horizons[hz + 'd'].excessMeanPct);
@@ -428,7 +430,7 @@ function computeRobustness(bucketResults, allRows) {
     const datesInChunk = allDates.slice(k * chunkSize, (k + 1) * chunkSize);
     const dateSet = new Set(datesInChunk);
     const rows = allRows.filter(r => dateSet.has(r.date) && (r.bucket === '75-90' || r.bucket === '90-100'));
-    const vals = rows.map(r => r.excess20).filter(v => v != null);
+    const vals = rows.map(r => excessOf(r, 20, benchmark)).filter(v => v != null);
     return {
       label: 'Y' + (k + 1),
       start: datesInChunk[0] || null,
@@ -441,13 +443,13 @@ function computeRobustness(bucketResults, allRows) {
   return { spearmanRhoBucketVsExcess: spearman, subPeriods };
 }
 
-function computeItemAnalysis(allRows, dateList, dateStats) {
+function computeItemAnalysis(allRows, dateList, dateStats, benchmark) {
   return ITEM_COLS.map(col => {
-    const withRet = allRows.filter(r => r[col] != null && r.excess20 != null);
+    const withRet = allRows.filter(r => r[col] != null && excessOf(r, 20, benchmark) != null);
     const withPts = withRet.filter(r => r[col] > 0);
     const withoutPts = withRet.filter(r => r[col] <= 0);
-    const meanWith = mean(withPts.map(r => r.excess20));
-    const meanWithout = mean(withoutPts.map(r => r.excess20));
+    const meanWith = mean(withPts.map(r => excessOf(r, 20, benchmark)));
+    const meanWithout = mean(withoutPts.map(r => excessOf(r, 20, benchmark)));
     return {
       item: col,
       nPositive: withPts.length,
@@ -523,17 +525,17 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\n観測数: ${allRows.length}件。ベンチマーク・超過リターンを計算中...`);
-  computeBenchmarkAndExcess(allRows);
+  console.log(`\n観測数: ${allRows.length}件。ベンチマークを計算中...`);
+  const benchmark = computeBenchmark(allRows);
 
   const dateList = [...new Set(allRows.map(r => r.date))].sort();
   console.log(`対象営業日数: ${dateList.length}日。日付別集計を構築中...`);
-  const dateStats = buildDateStats(allRows);
+  const dateStats = buildDateStats(allRows, benchmark);
 
   console.log(`ブートストラップ実行中（${CONFIG.bootstrapIters}回 × バケット/項目）...`);
-  const buckets = aggregateBuckets(allRows, dateList, dateStats);
-  const robustness = computeRobustness(buckets, allRows);
-  const itemAnalysis = computeItemAnalysis(allRows, dateList, dateStats);
+  const buckets = aggregateBuckets(allRows, dateList, dateStats, benchmark);
+  const robustness = computeRobustness(buckets, allRows, benchmark);
+  const itemAnalysis = computeItemAnalysis(allRows, dateList, dateStats, benchmark);
   const verdict = computeVerdict(dateList, dateStats, robustness);
 
   const runId = process.env.BT_RUN_ID || new Date().toISOString().replace(/[:.]/g, '-');

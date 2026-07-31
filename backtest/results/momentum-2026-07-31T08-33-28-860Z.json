@@ -1,0 +1,248 @@
+{
+  "runId": "2026-07-31T08-33-28-860Z",
+  "hypothesis": "クロスセクショナル・モメンタム(12-1) — 過去12ヶ月(直近1ヶ月除く)のリターンが高い銘柄は市場平均を上回り続けるか",
+  "config": {
+    "horizons": [
+      1,
+      5,
+      20
+    ],
+    "lookbackBars": 252,
+    "skipBars": 21,
+    "bootstrapIters": 2000,
+    "blockLength": 40
+  },
+  "universe": {
+    "stockCount": 3658,
+    "scoredStockCount": 3575,
+    "startDate": "2017-09-06",
+    "endDate": "2026-06-30"
+  },
+  "coverage": {
+    "totalObservations": 7015412,
+    "skippedStocks": 83
+  },
+  "quintiles": [
+    {
+      "quintile": "Q1",
+      "label": "下位20%(loser)",
+      "horizons": {
+        "1d": {
+          "n": 1404456,
+          "excessMeanPct": -0.004,
+          "excessCI95": [
+            -0.016,
+            0.008
+          ]
+        },
+        "5d": {
+          "n": 1404456,
+          "excessMeanPct": -0.005,
+          "excessCI95": [
+            -0.08,
+            0.084
+          ]
+        },
+        "20d": {
+          "n": 1404456,
+          "excessMeanPct": -0.024,
+          "excessCI95": [
+            -0.339,
+            0.307
+          ]
+        }
+      }
+    },
+    {
+      "quintile": "Q2",
+      "label": "下位40-20%",
+      "horizons": {
+        "1d": {
+          "n": 1403132,
+          "excessMeanPct": 0.004,
+          "excessCI95": [
+            -0.002,
+            0.009
+          ]
+        },
+        "5d": {
+          "n": 1403132,
+          "excessMeanPct": -0.005,
+          "excessCI95": [
+            -0.034,
+            0.026
+          ]
+        },
+        "20d": {
+          "n": 1403132,
+          "excessMeanPct": -0.027,
+          "excessCI95": [
+            -0.149,
+            0.089
+          ]
+        }
+      }
+    },
+    {
+      "quintile": "Q3",
+      "label": "中位",
+      "horizons": {
+        "1d": {
+          "n": 1403039,
+          "excessMeanPct": 0.006,
+          "excessCI95": [
+            0,
+            0.012
+          ]
+        },
+        "5d": {
+          "n": 1403039,
+          "excessMeanPct": 0.003,
+          "excessCI95": [
+            -0.032,
+            0.037
+          ]
+        },
+        "20d": {
+          "n": 1403039,
+          "excessMeanPct": 0.021,
+          "excessCI95": [
+            -0.129,
+            0.142
+          ]
+        }
+      }
+    },
+    {
+      "quintile": "Q4",
+      "label": "上位40-20%",
+      "horizons": {
+        "1d": {
+          "n": 1403105,
+          "excessMeanPct": 0.004,
+          "excessCI95": [
+            -0.001,
+            0.009
+          ]
+        },
+        "5d": {
+          "n": 1403105,
+          "excessMeanPct": 0.011,
+          "excessCI95": [
+            -0.029,
+            0.046
+          ]
+        },
+        "20d": {
+          "n": 1403105,
+          "excessMeanPct": 0.061,
+          "excessCI95": [
+            -0.098,
+            0.187
+          ]
+        }
+      }
+    },
+    {
+      "quintile": "Q5",
+      "label": "上位20%(winner)",
+      "horizons": {
+        "1d": {
+          "n": 1401680,
+          "excessMeanPct": -0.01,
+          "excessCI95": [
+            -0.02,
+            0.002
+          ]
+        },
+        "5d": {
+          "n": 1401680,
+          "excessMeanPct": -0.004,
+          "excessCI95": [
+            -0.068,
+            0.06
+          ]
+        },
+        "20d": {
+          "n": 1401680,
+          "excessMeanPct": -0.031,
+          "excessCI95": [
+            -0.263,
+            0.253
+          ]
+        }
+      }
+    }
+  ],
+  "spread": {
+    "description": "Q5(winner)-Q1(loser)の超過リターン差（ロング・ショート・ポートフォリオ相当）",
+    "horizons": {
+      "1d": {
+        "meanPct": -0.007,
+        "CI95": [
+          -0.025,
+          0.013
+        ]
+      },
+      "5d": {
+        "meanPct": -0.007,
+        "CI95": [
+          -0.134,
+          0.118
+        ]
+      },
+      "20d": {
+        "meanPct": -0.038,
+        "CI95": [
+          -0.523,
+          0.46
+        ]
+      }
+    }
+  },
+  "robustness": {
+    "spearmanRho20d": -0.1,
+    "subPeriods": [
+      {
+        "label": "Y1",
+        "start": "2017-09-06",
+        "end": "2020-07-29",
+        "n": 723,
+        "spreadMeanPct20d": -0.45
+      },
+      {
+        "label": "Y2",
+        "start": "2020-07-30",
+        "end": "2023-07-12",
+        "n": 723,
+        "spreadMeanPct20d": -0.205
+      },
+      {
+        "label": "Y3",
+        "start": "2023-07-13",
+        "end": "2026-06-30",
+        "n": 723,
+        "spreadMeanPct20d": 0.54
+      }
+    ]
+  },
+  "verdict": {
+    "criterion1_spread20dCI95LowerAboveZero": false,
+    "criterion1_detail": {
+      "spreadCI95_20d": [
+        -0.535,
+        0.462
+      ]
+    },
+    "criterion2_monotonicitySpearmanAtLeast08": false,
+    "criterion2_detail": {
+      "rho20d": -0.1
+    },
+    "criterion3_signPositiveIn2of3SubPeriods": false,
+    "criterion3_detail": {
+      "positiveSubPeriods": 1,
+      "of": 3
+    },
+    "conclusion": "EDGE_NOT_CONFIRMED"
+  }
+}

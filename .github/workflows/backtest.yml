@@ -42,6 +42,10 @@ jobs:
           BT_SLIPPAGE_BPS: ${{ inputs.slippage_bps }}
           BT_TAX_PCT: ${{ inputs.tax_pct }}
           BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          # 約3,770銘柄×10年分(観測数700万件超)をメモリ上に保持するためデフォルト
+          # ヒープ(~4GB)ではOOMする。ubuntu-latestランナーの実メモリ(7GB)内で
+          # 余裕を持たせて6GBまで拡張する
+          NODE_OPTIONS: '--max-old-space-size=6144'
         run: node backtest/run.mjs
 
       - name: 結果をリポジトリにコミット

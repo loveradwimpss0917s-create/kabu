@@ -1,0 +1,401 @@
+{
+  "runId": "2026-08-02T15-12-50-631Z",
+  "purpose": "rev5(短期リバーサル)の実用性判定 — ロング専用・コスト差引後・流動性別",
+  "caveat": "5日ホライズンでの有意性は事前登録した検定ではない（事前登録は20日ホライズン）。したがって本結果は新たな発見の主張ではなく、既に見えている手がかりの実用性を確認するもの。仮に有望に見えても、実運用前に将来データでの追試（アウト・オブ・サンプル検証）が必須である。",
+  "config": {
+    "holdBars": 5,
+    "rev5Lookback": 5,
+    "turnoverLookback": 20,
+    "bootstrapIters": 2000,
+    "blockLength": 40,
+    "ciInflation": 1.5,
+    "periodsPerYear": 50
+  },
+  "coverage": {
+    "stockCount": 3658,
+    "skipped": 112,
+    "totalObservations": 7713723
+  },
+  "tiers": [
+    {
+      "key": "all",
+      "label": "全銘柄",
+      "topPct": 1,
+      "tradingDays": 2436,
+      "quintiles": {
+        "Q1": {
+          "excessMeanPct": 0.08,
+          "excessCI95": [
+            0.008,
+            0.164
+          ]
+        },
+        "Q2": {
+          "excessMeanPct": 0.066,
+          "excessCI95": [
+            0.029,
+            0.097
+          ]
+        },
+        "Q3": {
+          "excessMeanPct": 0.039,
+          "excessCI95": [
+            0.004,
+            0.071
+          ]
+        },
+        "Q4": {
+          "excessMeanPct": -0.012,
+          "excessCI95": [
+            -0.049,
+            0.022
+          ]
+        },
+        "Q5": {
+          "excessMeanPct": -0.174,
+          "excessCI95": [
+            -0.246,
+            -0.092
+          ]
+        }
+      },
+      "costScenarios": [
+        {
+          "key": "zero",
+          "label": "コストゼロ（理論上限・実現不可）",
+          "roundTripPct": 0,
+          "netPerTradePct": 0.08,
+          "netCI95": [
+            0.008,
+            0.164
+          ],
+          "netAnnualizedPct": 4,
+          "profitableWithConfidence": true
+        },
+        {
+          "key": "optimistic",
+          "label": "極めて楽観的（往復0.05%）",
+          "roundTripPct": 0.05,
+          "netPerTradePct": 0.03,
+          "netCI95": [
+            -0.042,
+            0.114
+          ],
+          "netAnnualizedPct": 1.5,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "realistic",
+          "label": "現実的な下限（往復0.10%・手数料無料前提）",
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.02,
+          "netCI95": [
+            -0.092,
+            0.064
+          ],
+          "netAnnualizedPct": -1,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "current",
+          "label": "現行前提（往復0.30%）",
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.22,
+          "netCI95": [
+            -0.292,
+            -0.136
+          ],
+          "netAnnualizedPct": -11,
+          "profitableWithConfidence": false
+        }
+      ],
+      "anyProfitable": true
+    },
+    {
+      "key": "top50",
+      "label": "売買代金 上位50%",
+      "topPct": 0.5,
+      "tradingDays": 2436,
+      "quintiles": {
+        "Q1": {
+          "excessMeanPct": 0.024,
+          "excessCI95": [
+            -0.07,
+            0.124
+          ]
+        },
+        "Q2": {
+          "excessMeanPct": 0.055,
+          "excessCI95": [
+            0.008,
+            0.093
+          ]
+        },
+        "Q3": {
+          "excessMeanPct": 0.048,
+          "excessCI95": [
+            -0.001,
+            0.088
+          ]
+        },
+        "Q4": {
+          "excessMeanPct": 0.014,
+          "excessCI95": [
+            -0.034,
+            0.056
+          ]
+        },
+        "Q5": {
+          "excessMeanPct": -0.14,
+          "excessCI95": [
+            -0.22,
+            -0.036
+          ]
+        }
+      },
+      "costScenarios": [
+        {
+          "key": "zero",
+          "label": "コストゼロ（理論上限・実現不可）",
+          "roundTripPct": 0,
+          "netPerTradePct": 0.024,
+          "netCI95": [
+            -0.07,
+            0.124
+          ],
+          "netAnnualizedPct": 1.2,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "optimistic",
+          "label": "極めて楽観的（往復0.05%）",
+          "roundTripPct": 0.05,
+          "netPerTradePct": -0.026,
+          "netCI95": [
+            -0.12,
+            0.074
+          ],
+          "netAnnualizedPct": -1.3,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "realistic",
+          "label": "現実的な下限（往復0.10%・手数料無料前提）",
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.076,
+          "netCI95": [
+            -0.17,
+            0.024
+          ],
+          "netAnnualizedPct": -3.8,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "current",
+          "label": "現行前提（往復0.30%）",
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.276,
+          "netCI95": [
+            -0.37,
+            -0.176
+          ],
+          "netAnnualizedPct": -13.8,
+          "profitableWithConfidence": false
+        }
+      ],
+      "anyProfitable": false
+    },
+    {
+      "key": "top20",
+      "label": "売買代金 上位20%",
+      "topPct": 0.2,
+      "tradingDays": 2436,
+      "quintiles": {
+        "Q1": {
+          "excessMeanPct": -0.009,
+          "excessCI95": [
+            -0.106,
+            0.104
+          ]
+        },
+        "Q2": {
+          "excessMeanPct": 0.056,
+          "excessCI95": [
+            -0.007,
+            0.101
+          ]
+        },
+        "Q3": {
+          "excessMeanPct": 0.042,
+          "excessCI95": [
+            -0.02,
+            0.091
+          ]
+        },
+        "Q4": {
+          "excessMeanPct": 0.028,
+          "excessCI95": [
+            -0.028,
+            0.073
+          ]
+        },
+        "Q5": {
+          "excessMeanPct": -0.116,
+          "excessCI95": [
+            -0.208,
+            0.005
+          ]
+        }
+      },
+      "costScenarios": [
+        {
+          "key": "zero",
+          "label": "コストゼロ（理論上限・実現不可）",
+          "roundTripPct": 0,
+          "netPerTradePct": -0.009,
+          "netCI95": [
+            -0.106,
+            0.104
+          ],
+          "netAnnualizedPct": -0.45,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "optimistic",
+          "label": "極めて楽観的（往復0.05%）",
+          "roundTripPct": 0.05,
+          "netPerTradePct": -0.059,
+          "netCI95": [
+            -0.156,
+            0.054
+          ],
+          "netAnnualizedPct": -2.95,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "realistic",
+          "label": "現実的な下限（往復0.10%・手数料無料前提）",
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.109,
+          "netCI95": [
+            -0.206,
+            0.004
+          ],
+          "netAnnualizedPct": -5.45,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "current",
+          "label": "現行前提（往復0.30%）",
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.309,
+          "netCI95": [
+            -0.406,
+            -0.196
+          ],
+          "netAnnualizedPct": -15.45,
+          "profitableWithConfidence": false
+        }
+      ],
+      "anyProfitable": false
+    },
+    {
+      "key": "top10",
+      "label": "売買代金 上位10%（大型株中心）",
+      "topPct": 0.1,
+      "tradingDays": 2436,
+      "quintiles": {
+        "Q1": {
+          "excessMeanPct": -0.017,
+          "excessCI95": [
+            -0.11,
+            0.104
+          ]
+        },
+        "Q2": {
+          "excessMeanPct": 0.045,
+          "excessCI95": [
+            -0.02,
+            0.104
+          ]
+        },
+        "Q3": {
+          "excessMeanPct": 0.042,
+          "excessCI95": [
+            -0.025,
+            0.091
+          ]
+        },
+        "Q4": {
+          "excessMeanPct": 0.02,
+          "excessCI95": [
+            -0.049,
+            0.072
+          ]
+        },
+        "Q5": {
+          "excessMeanPct": -0.089,
+          "excessCI95": [
+            -0.196,
+            0.048
+          ]
+        }
+      },
+      "costScenarios": [
+        {
+          "key": "zero",
+          "label": "コストゼロ（理論上限・実現不可）",
+          "roundTripPct": 0,
+          "netPerTradePct": -0.017,
+          "netCI95": [
+            -0.11,
+            0.104
+          ],
+          "netAnnualizedPct": -0.85,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "optimistic",
+          "label": "極めて楽観的（往復0.05%）",
+          "roundTripPct": 0.05,
+          "netPerTradePct": -0.067,
+          "netCI95": [
+            -0.16,
+            0.054
+          ],
+          "netAnnualizedPct": -3.35,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "realistic",
+          "label": "現実的な下限（往復0.10%・手数料無料前提）",
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.117,
+          "netCI95": [
+            -0.21,
+            0.004
+          ],
+          "netAnnualizedPct": -5.85,
+          "profitableWithConfidence": false
+        },
+        {
+          "key": "current",
+          "label": "現行前提（往復0.30%）",
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.317,
+          "netCI95": [
+            -0.41,
+            -0.196
+          ],
+          "netAnnualizedPct": -15.85,
+          "profitableWithConfidence": false
+        }
+      ],
+      "anyProfitable": false
+    }
+  ],
+  "verdict": {
+    "conclusion": "TRADABLE_UNDER_SOME_COST_ASSUMPTION",
+    "anyTierTradable": true
+  }
+}

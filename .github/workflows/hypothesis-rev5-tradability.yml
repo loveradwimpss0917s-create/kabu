@@ -1,0 +1,45 @@
+name: 仮説検証 rev5実用性判定（研究用・手動実行）
+
+# Step3-(5): 短期リバーサル(rev5)がロング専用・コスト差引後でも実用になるかの判定。
+# 新しい仮説は追加せず、既に見えている手がかりの実用性だけを確認する。
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '2000'
+      ci_inflation:
+        description: '信頼区間の拡大倍率（較正値=1.5。通常は変更しない）'
+        required: false
+        default: '1.5'
+
+permissions:
+  contents: write
+
+jobs:
+  rev5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: rev5実用性判定を実行
+        env:
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          BT_CI_INFLATION: ${{ inputs.ci_inflation }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/hypothesis-rev5-tradability.mjs
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: rev5実用性判定の結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

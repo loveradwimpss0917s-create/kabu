@@ -1,0 +1,880 @@
+{
+  "runId": "2026-08-02T14-49-57-277Z",
+  "hypothesis": "無料OHLCVデータで検証可能なクロスセクショナル・ファクター4種の一括検証",
+  "preRegistration": "検証するファクターと期待符号は実行前にコード上で固定した。4件すべての結果を良し悪しに関わらず報告する。",
+  "multipleTestingNote": "4ファクターを同時検定しているため多重比較の問題がある。95%CIを4回使うと、真に効果がなくても約18%の確率でいずれかが偶然「有意」に見える。そのためBonferroni補正後(1.25%水準=98.75%CI)でも有意なものだけをEDGE_CONFIRMEDとし、補正前のみ有意なものはEDGE_LIKELY_BUT_NOT_MULTIPLICITY_ROBUSTとして区別する。",
+  "ciCalibrationNote": "移動ブロック・ブートストラップは銘柄横断方向の不確実性を捉えられず標準誤差を約23%過小評価することを合成データで実測した（真のSE 0.0928%に対しブートストラップSE 0.0713%）。補正なしでは効果ゼロのデータでも23%の頻度で「有意」と誤判定した。そのため全ての信頼区間を点推定中心に1.5倍へ拡大している（この倍率で偽陽性0%・検出力100%を実測）。",
+  "config": {
+    "horizons": [
+      1,
+      5,
+      20
+    ],
+    "rev5Lookback": 5,
+    "rev20Lookback": 20,
+    "volLookback": 60,
+    "turnoverLookback": 20,
+    "bootstrapIters": 2000,
+    "blockLength": 40,
+    "ciInflation": 1.5
+  },
+  "coverage": {
+    "stockCount": 3658,
+    "skipped": 112,
+    "totalObservations": 7526054
+  },
+  "factors": [
+    {
+      "key": "rev5",
+      "label": "短期リバーサル(直近5日リターン)",
+      "expectedSign": -1,
+      "rationale": "PEADサニティチェックで急変動後の反転を強く検出したため、その体系版",
+      "horizons": {
+        "1d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1507920,
+              "excessMeanPct": 0.032,
+              "excessCI95": [
+                0.019,
+                0.052
+              ]
+            },
+            "Q2": {
+              "n": 1508973,
+              "excessMeanPct": 0.029,
+              "excessCI95": [
+                0.021,
+                0.038
+              ]
+            },
+            "Q3": {
+              "n": 1503690,
+              "excessMeanPct": 0.02,
+              "excessCI95": [
+                0.012,
+                0.026
+              ]
+            },
+            "Q4": {
+              "n": 1502434,
+              "excessMeanPct": -0.002,
+              "excessCI95": [
+                -0.012,
+                0.006
+              ]
+            },
+            "Q5": {
+              "n": 1503037,
+              "excessMeanPct": -0.08,
+              "excessCI95": [
+                -0.097,
+                -0.064
+              ]
+            }
+          },
+          "spreadMeanPct": -0.11,
+          "spreadCI95": [
+            -0.143,
+            -0.086
+          ],
+          "spreadCI_bonferroni": [
+            -0.151,
+            -0.079
+          ]
+        },
+        "5d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1507920,
+              "excessMeanPct": 0.085,
+              "excessCI95": [
+                0.002,
+                0.158
+              ]
+            },
+            "Q2": {
+              "n": 1508973,
+              "excessMeanPct": 0.067,
+              "excessCI95": [
+                0.031,
+                0.099
+              ]
+            },
+            "Q3": {
+              "n": 1503690,
+              "excessMeanPct": 0.036,
+              "excessCI95": [
+                0.004,
+                0.068
+              ]
+            },
+            "Q4": {
+              "n": 1502434,
+              "excessMeanPct": -0.016,
+              "excessCI95": [
+                -0.051,
+                0.021
+              ]
+            },
+            "Q5": {
+              "n": 1503037,
+              "excessMeanPct": -0.173,
+              "excessCI95": [
+                -0.242,
+                -0.089
+              ]
+            }
+          },
+          "spreadMeanPct": -0.259,
+          "spreadCI95": [
+            -0.386,
+            -0.113
+          ],
+          "spreadCI_bonferroni": [
+            -0.42,
+            -0.076
+          ]
+        },
+        "20d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1507920,
+              "excessMeanPct": 0.074,
+              "excessCI95": [
+                -0.177,
+                0.317
+              ]
+            },
+            "Q2": {
+              "n": 1508973,
+              "excessMeanPct": 0.107,
+              "excessCI95": [
+                -0.009,
+                0.202
+              ]
+            },
+            "Q3": {
+              "n": 1503690,
+              "excessMeanPct": 0.052,
+              "excessCI95": [
+                -0.09,
+                0.184
+              ]
+            },
+            "Q4": {
+              "n": 1502434,
+              "excessMeanPct": -0.018,
+              "excessCI95": [
+                -0.143,
+                0.104
+              ]
+            },
+            "Q5": {
+              "n": 1503037,
+              "excessMeanPct": -0.216,
+              "excessCI95": [
+                -0.403,
+                0.026
+              ]
+            }
+          },
+          "spreadMeanPct": -0.301,
+          "spreadCI95": [
+            -0.603,
+            0.056
+          ],
+          "spreadCI_bonferroni": [
+            -0.721,
+            0.154
+          ]
+        }
+      },
+      "robustness": {
+        "spearmanRho20d": -0.9,
+        "monotonicAsExpected": true,
+        "subPeriods": [
+          {
+            "label": "Y1",
+            "start": "2016-10-31",
+            "end": "2019-12-25",
+            "n": 794,
+            "spreadMeanPct20d": -0.473
+          },
+          {
+            "label": "Y2",
+            "start": "2019-12-26",
+            "end": "2023-03-31",
+            "n": 794,
+            "spreadMeanPct20d": -0.293
+          },
+          {
+            "label": "Y3",
+            "start": "2023-04-03",
+            "end": "2026-06-30",
+            "n": 793,
+            "spreadMeanPct20d": -0.136
+          }
+        ],
+        "subPeriodsConsistent": 3
+      },
+      "verdict": {
+        "significant95": false,
+        "significantBonferroni": false,
+        "monotonic": true,
+        "consistent": true,
+        "conclusion": "EDGE_NOT_CONFIRMED",
+        "spread20d": {
+          "meanPct": -0.301,
+          "ci95": [
+            -0.603,
+            0.056
+          ],
+          "ciBonferroni": [
+            -0.721,
+            0.154
+          ]
+        }
+      }
+    },
+    {
+      "key": "rev20",
+      "label": "1ヶ月リバーサル(直近20日リターン)",
+      "expectedSign": -1,
+      "rationale": "rev5より長い窓での同種の反転効果",
+      "horizons": {
+        "1d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506986,
+              "excessMeanPct": 0.003,
+              "excessCI95": [
+                -0.014,
+                0.023
+              ]
+            },
+            "Q2": {
+              "n": 1506056,
+              "excessMeanPct": 0.013,
+              "excessCI95": [
+                0.005,
+                0.021
+              ]
+            },
+            "Q3": {
+              "n": 1504683,
+              "excessMeanPct": 0.014,
+              "excessCI95": [
+                0.006,
+                0.021
+              ]
+            },
+            "Q4": {
+              "n": 1504611,
+              "excessMeanPct": 0.006,
+              "excessCI95": [
+                -0.004,
+                0.014
+              ]
+            },
+            "Q5": {
+              "n": 1503718,
+              "excessMeanPct": -0.036,
+              "excessCI95": [
+                -0.05,
+                -0.021
+              ]
+            }
+          },
+          "spreadMeanPct": -0.038,
+          "spreadCI95": [
+            -0.069,
+            -0.011
+          ],
+          "spreadCI_bonferroni": [
+            -0.08,
+            -0.003
+          ]
+        },
+        "5d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506986,
+              "excessMeanPct": 0.034,
+              "excessCI95": [
+                -0.07,
+                0.138
+              ]
+            },
+            "Q2": {
+              "n": 1506056,
+              "excessMeanPct": 0.035,
+              "excessCI95": [
+                -0.012,
+                0.076
+              ]
+            },
+            "Q3": {
+              "n": 1504683,
+              "excessMeanPct": 0.025,
+              "excessCI95": [
+                -0.013,
+                0.065
+              ]
+            },
+            "Q4": {
+              "n": 1504611,
+              "excessMeanPct": -0.003,
+              "excessCI95": [
+                -0.056,
+                0.044
+              ]
+            },
+            "Q5": {
+              "n": 1503718,
+              "excessMeanPct": -0.091,
+              "excessCI95": [
+                -0.184,
+                0.004
+              ]
+            }
+          },
+          "spreadMeanPct": -0.127,
+          "spreadCI95": [
+            -0.308,
+            0.054
+          ],
+          "spreadCI_bonferroni": [
+            -0.353,
+            0.084
+          ]
+        },
+        "20d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506986,
+              "excessMeanPct": 0.034,
+              "excessCI95": [
+                -0.337,
+                0.419
+              ]
+            },
+            "Q2": {
+              "n": 1506056,
+              "excessMeanPct": 0.072,
+              "excessCI95": [
+                -0.079,
+                0.203
+              ]
+            },
+            "Q3": {
+              "n": 1504683,
+              "excessMeanPct": 0.058,
+              "excessCI95": [
+                -0.09,
+                0.206
+              ]
+            },
+            "Q4": {
+              "n": 1504611,
+              "excessMeanPct": 0.018,
+              "excessCI95": [
+                -0.181,
+                0.195
+              ]
+            },
+            "Q5": {
+              "n": 1503718,
+              "excessMeanPct": -0.182,
+              "excessCI95": [
+                -0.452,
+                0.147
+              ]
+            }
+          },
+          "spreadMeanPct": -0.229,
+          "spreadCI95": [
+            -0.816,
+            0.404
+          ],
+          "spreadCI_bonferroni": [
+            -1.005,
+            0.508
+          ]
+        }
+      },
+      "robustness": {
+        "spearmanRho20d": -0.7,
+        "monotonicAsExpected": false,
+        "subPeriods": [
+          {
+            "label": "Y1",
+            "start": "2016-10-31",
+            "end": "2019-12-25",
+            "n": 794,
+            "spreadMeanPct20d": -0.319
+          },
+          {
+            "label": "Y2",
+            "start": "2019-12-26",
+            "end": "2023-03-31",
+            "n": 794,
+            "spreadMeanPct20d": -0.49
+          },
+          {
+            "label": "Y3",
+            "start": "2023-04-03",
+            "end": "2026-06-30",
+            "n": 793,
+            "spreadMeanPct20d": 0.124
+          }
+        ],
+        "subPeriodsConsistent": 2
+      },
+      "verdict": {
+        "significant95": false,
+        "significantBonferroni": false,
+        "monotonic": false,
+        "consistent": true,
+        "conclusion": "EDGE_NOT_CONFIRMED",
+        "spread20d": {
+          "meanPct": -0.229,
+          "ci95": [
+            -0.816,
+            0.404
+          ],
+          "ciBonferroni": [
+            -1.005,
+            0.508
+          ]
+        }
+      }
+    },
+    {
+      "key": "vol60",
+      "label": "低ボラティリティ(直近60日の日次リターン標準偏差)",
+      "expectedSign": -1,
+      "rationale": "低ボラティリティ・アノマリー（高ボラ銘柄が劣後する）",
+      "horizons": {
+        "1d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": 0.012,
+              "excessCI95": [
+                -0.006,
+                0.027
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": 0.014,
+              "excessCI95": [
+                0.002,
+                0.025
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": 0.011,
+              "excessCI95": [
+                0.003,
+                0.019
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": 0.007,
+              "excessCI95": [
+                -0.002,
+                0.017
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": -0.045,
+              "excessCI95": [
+                -0.068,
+                -0.016
+              ]
+            }
+          },
+          "spreadMeanPct": -0.056,
+          "spreadCI95": [
+            -0.092,
+            -0.011
+          ],
+          "spreadCI_bonferroni": [
+            -0.104,
+            -0.002
+          ]
+        },
+        "5d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": -0.034,
+              "excessCI95": [
+                -0.145,
+                0.076
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": 0.013,
+              "excessCI95": [
+                -0.068,
+                0.088
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": 0.027,
+              "excessCI95": [
+                -0.023,
+                0.068
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": 0.038,
+              "excessCI95": [
+                -0.026,
+                0.094
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": -0.043,
+              "excessCI95": [
+                -0.202,
+                0.139
+              ]
+            }
+          },
+          "spreadMeanPct": -0.004,
+          "spreadCI95": [
+            -0.256,
+            0.274
+          ],
+          "spreadCI_bonferroni": [
+            -0.356,
+            0.357
+          ]
+        },
+        "20d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": -0.197,
+              "excessCI95": [
+                -0.619,
+                0.242
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": 0.026,
+              "excessCI95": [
+                -0.306,
+                0.334
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": 0.076,
+              "excessCI95": [
+                -0.123,
+                0.223
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": 0.151,
+              "excessCI95": [
+                -0.094,
+                0.371
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": -0.056,
+              "excessCI95": [
+                -0.694,
+                0.697
+              ]
+            }
+          },
+          "spreadMeanPct": 0.166,
+          "spreadCI95": [
+            -0.889,
+            1.3
+          ],
+          "spreadCI_bonferroni": [
+            -1.164,
+            1.594
+          ]
+        }
+      },
+      "robustness": {
+        "spearmanRho20d": 0.4,
+        "monotonicAsExpected": false,
+        "subPeriods": [
+          {
+            "label": "Y1",
+            "start": "2016-10-31",
+            "end": "2019-12-25",
+            "n": 794,
+            "spreadMeanPct20d": 0.569
+          },
+          {
+            "label": "Y2",
+            "start": "2019-12-26",
+            "end": "2023-03-31",
+            "n": 794,
+            "spreadMeanPct20d": 0.068
+          },
+          {
+            "label": "Y3",
+            "start": "2023-04-03",
+            "end": "2026-06-30",
+            "n": 793,
+            "spreadMeanPct20d": -0.139
+          }
+        ],
+        "subPeriodsConsistent": 1
+      },
+      "verdict": {
+        "significant95": false,
+        "significantBonferroni": false,
+        "monotonic": false,
+        "consistent": false,
+        "conclusion": "EDGE_NOT_CONFIRMED",
+        "spread20d": {
+          "meanPct": 0.166,
+          "ci95": [
+            -0.889,
+            1.3
+          ],
+          "ciBonferroni": [
+            -1.164,
+            1.594
+          ]
+        }
+      }
+    },
+    {
+      "key": "turnover",
+      "label": "低流動性(直近20日の平均売買代金・対数)",
+      "expectedSign": -1,
+      "rationale": "流動性プレミアム（売買代金が小さい銘柄ほど高リターン）",
+      "horizons": {
+        "1d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": 0.019,
+              "excessCI95": [
+                -0.002,
+                0.034
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": -0.01,
+              "excessCI95": [
+                -0.023,
+                -0.002
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": -0.012,
+              "excessCI95": [
+                -0.025,
+                0.001
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": -0.004,
+              "excessCI95": [
+                -0.014,
+                0.009
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": 0.008,
+              "excessCI95": [
+                -0.004,
+                0.025
+              ]
+            }
+          },
+          "spreadMeanPct": -0.01,
+          "spreadCI95": [
+            -0.031,
+            0.022
+          ],
+          "spreadCI_bonferroni": [
+            -0.038,
+            0.027
+          ]
+        },
+        "5d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": 0.062,
+              "excessCI95": [
+                -0.012,
+                0.142
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": 0.013,
+              "excessCI95": [
+                -0.039,
+                0.058
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": -0.019,
+              "excessCI95": [
+                -0.075,
+                0.031
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": -0.042,
+              "excessCI95": [
+                -0.094,
+                0.011
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": -0.014,
+              "excessCI95": [
+                -0.095,
+                0.073
+              ]
+            }
+          },
+          "spreadMeanPct": -0.082,
+          "spreadCI95": [
+            -0.212,
+            0.051
+          ],
+          "spreadCI_bonferroni": [
+            -0.245,
+            0.089
+          ]
+        },
+        "20d": {
+          "quintiles": {
+            "Q1": {
+              "n": 1506657,
+              "excessMeanPct": 0.199,
+              "excessCI95": [
+                -0.092,
+                0.517
+              ]
+            },
+            "Q2": {
+              "n": 1505193,
+              "excessMeanPct": 0.068,
+              "excessCI95": [
+                -0.127,
+                0.241
+              ]
+            },
+            "Q3": {
+              "n": 1505210,
+              "excessMeanPct": -0.07,
+              "excessCI95": [
+                -0.253,
+                0.085
+              ]
+            },
+            "Q4": {
+              "n": 1505193,
+              "excessMeanPct": -0.121,
+              "excessCI95": [
+                -0.317,
+                0.079
+              ]
+            },
+            "Q5": {
+              "n": 1503801,
+              "excessMeanPct": -0.076,
+              "excessCI95": [
+                -0.382,
+                0.26
+              ]
+            }
+          },
+          "spreadMeanPct": -0.306,
+          "spreadCI95": [
+            -0.835,
+            0.197
+          ],
+          "spreadCI_bonferroni": [
+            -1.005,
+            0.309
+          ]
+        }
+      },
+      "robustness": {
+        "spearmanRho20d": -0.9,
+        "monotonicAsExpected": true,
+        "subPeriods": [
+          {
+            "label": "Y1",
+            "start": "2016-10-31",
+            "end": "2019-12-25",
+            "n": 794,
+            "spreadMeanPct20d": -0.741
+          },
+          {
+            "label": "Y2",
+            "start": "2019-12-26",
+            "end": "2023-03-31",
+            "n": 794,
+            "spreadMeanPct20d": -0.383
+          },
+          {
+            "label": "Y3",
+            "start": "2023-04-03",
+            "end": "2026-06-30",
+            "n": 793,
+            "spreadMeanPct20d": 0.205
+          }
+        ],
+        "subPeriodsConsistent": 2
+      },
+      "verdict": {
+        "significant95": false,
+        "significantBonferroni": false,
+        "monotonic": true,
+        "consistent": true,
+        "conclusion": "EDGE_NOT_CONFIRMED",
+        "spread20d": {
+          "meanPct": -0.306,
+          "ci95": [
+            -0.835,
+            0.197
+          ],
+          "ciBonferroni": [
+            -1.005,
+            0.309
+          ]
+        }
+      }
+    }
+  ]
+}

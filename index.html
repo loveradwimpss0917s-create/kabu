@@ -358,6 +358,18 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .tj-dash-bar-fill{height:100%;border-radius:4px}
 .tj-dash-row-val{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;flex:0 0 92px;text-align:right}
 .tj-dash-empty{font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;text-align:center;padding:8px;line-height:1.6}
+.cost-input-row{display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.cost-input-wrap{display:flex;flex-direction:column;gap:4px}
+.cost-input-lbl{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace}
+.cost-input{width:76px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;padding:6px 8px;color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:12px}
+.cost-rt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt2);padding-bottom:7px}
+.cost-annual{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:11px;line-height:1.7;font-family:'JetBrains Mono',monospace}
+.cost-annual b{display:block;font-size:12px;margin-bottom:4px}
+.cost-annual.warn{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.35);color:var(--txt2)}
+.cost-annual.warn b{color:var(--red)}
+.cost-annual.ok{background:rgba(0,224,140,.06);border:1px solid rgba(0,224,140,.25);color:var(--txt2)}
+.cost-annual.ok b{color:var(--green)}
+.cost-net{margin-top:6px}
 
 /* FINANCIAL ALERT */
 .fa-alert{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px}
@@ -1966,6 +1978,20 @@ function renderCalendar(summaryData){
 // ── RENDER: 損益シミュレーター ─────────────────
 var _simCur=0,_simAtr=0,_simVClass='';
 // 口座資金・リスク許容%は毎回入力するものではなく端末設定として保持する
+// 売買コスト前提。既定値はバックテスト(backtest/run.mjs CONFIG)と同じ
+// 片道手数料5bps・片道スリッページ10bps（往復0.30%）。この前提の妥当性は
+// docs/検証結果まとめ_2026-08.md の実測で検証済み（rev5実用性判定で、この
+// コスト水準だと年-11%になることを確認している）
+var COST_SETTINGS_KEY='kabu_cost_settings';
+function costSettingsLoad(){
+  try{
+    var v=JSON.parse(localStorage.getItem(COST_SETTINGS_KEY)||'null');
+    if(v&&typeof v==='object')return {feeBps:v.feeBps!=null?v.feeBps:5, slippageBps:v.slippageBps!=null?v.slippageBps:10};
+  }catch(e){}
+  return {feeBps:5, slippageBps:10};
+}
+function costSettingsSave(s){ localStorage.setItem(COST_SETTINGS_KEY, JSON.stringify(s)); }
+
 var POSITION_SETTINGS_KEY='kabu_position_settings';
 function posSettingsLoad(){
   try{
@@ -2668,6 +2694,8 @@ function renderTradeDashboard(){
     cell('平均損失', '¥'+fmt(avgLoss,0), 'var(--red)')+
     '</div></div>';
 
+  html+=renderCostSection(closed, avgRet);
+
   // 方向別
   function dirStats(d){
     var sub=closed.filter(function(t){return t.dir===d;});
@@ -2712,6 +2740,66 @@ function renderTradeDashboard(){
     '</div>';
 
   p.innerHTML=html;
+}
+
+// 売買コストの実態を可視化する。実際の取引頻度（記録された取引の期間・件数から算出）に
+// コスト前提を当てはめ、「確実に発生する負け」を平均リターンとは別枠で警告する。
+// docs/検証結果まとめ_2026-08.md の実測（年50回転・往復0.30%で年-11〜15%）と同じ考え方
+function renderCostSection(closed, avgRetPct){
+  var cs=costSettingsLoad();
+  var roundTripPct=2*(cs.feeBps+cs.slippageBps)/100;
+
+  var inputsHtml='<div class="tj-dash-ttl">■ 売買コストの実態</div>'+
+    '<div class="cost-input-row">'+
+    '<div class="cost-input-wrap"><div class="cost-input-lbl">片道手数料(bps)</div><input class="cost-input" id="costFeeBps" type="number" value="'+cs.feeBps+'" step="0.5" min="0" inputmode="decimal" onchange="updateCostSettings()"></div>'+
+    '<div class="cost-input-wrap"><div class="cost-input-lbl">片道スリッページ(bps)</div><input class="cost-input" id="costSlipBps" type="number" value="'+cs.slippageBps+'" step="0.5" min="0" inputmode="decimal" onchange="updateCostSettings()"></div>'+
+    '<div class="cost-rt">往復 '+roundTripPct.toFixed(2)+'%</div>'+
+    '</div>';
+
+  if(closed.length<2){
+    return '<div class="tj-dash-sec">'+inputsHtml+
+      '<div class="tj-dash-empty">決済済み取引が2件以上になると、実際の取引頻度から年間のコスト負担を試算します。</div></div>';
+  }
+
+  var tsList=closed.map(function(t){return t.ts;});
+  var spanDays=(Math.max.apply(null,tsList)-Math.min.apply(null,tsList))/86400000;
+  var turnoverPerYear = spanDays>=1 ? (closed.length/spanDays*365) : null;
+
+  var avgNotional=closed.reduce(function(a,t){return a+Math.abs(t.entry*(t.qty||0));},0)/closed.length;
+  var costPerTradeYen=avgNotional*roundTripPct/100;
+  var totalCostPaidYen=closed.reduce(function(a,t){return a+Math.abs(t.entry*(t.qty||0))*roundTripPct/100;},0);
+
+  var html='<div class="tj-dash-sec">'+inputsHtml;
+
+  html+='<div class="tj-dash-grid">'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">1回転あたり想定コスト</div><div class="tj-dash-num" style="color:var(--red)">¥'+fmt(costPerTradeYen,0)+'</div></div>'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">記録期間の想定コスト累計</div><div class="tj-dash-num" style="color:var(--red)">¥'+fmt(totalCostPaidYen,0)+'</div></div>'+
+    '</div>';
+
+  if(turnoverPerYear!=null){
+    var annualDragPct=turnoverPerYear*roundTripPct;
+    var annualRetPct=avgRetPct*turnoverPerYear;
+    var netAnnualPct=annualRetPct-annualDragPct;
+    var warn=netAnnualPct<0;
+    html+='<div class="cost-annual '+(warn?'warn':'ok')+'">'+
+      '<b>'+(warn?'⚠️ ':'')+'実際の取引ペース: 年換算 約'+turnoverPerYear.toFixed(0)+'回転</b>'+
+      'このペースにコスト前提（往復'+roundTripPct.toFixed(2)+'%）を当てはめると、'+
+      'コストだけで年率 <span style="color:var(--red)">-'+annualDragPct.toFixed(1)+'%</span> の負担になります。'+
+      'これは平均リターン（年換算 '+(annualRetPct>=0?'+':'')+annualRetPct.toFixed(1)+'%）とは別に、毎回の売買で確実に発生する負けです。'+
+      '<div class="cost-net">コスト差引後の年率目安: <span style="color:'+(warn?'var(--red)':'var(--green)')+';font-weight:700">'+(netAnnualPct>=0?'+':'')+netAnnualPct.toFixed(1)+'%</span></div>'+
+      '</div>';
+  } else {
+    html+='<div class="tj-dash-empty">記録期間が短すぎるため年換算できません。取引が積み重なると試算されます。</div>';
+  }
+
+  html+='</div>';
+  return html;
+}
+function updateCostSettings(){
+  var fee=parseFloat(document.getElementById('costFeeBps').value);
+  var slip=parseFloat(document.getElementById('costSlipBps').value);
+  costSettingsSave({feeBps:isNaN(fee)?5:Math.max(0,fee), slippageBps:isNaN(slip)?10:Math.max(0,slip)});
+  renderTradeDashboard();
 }
 
 function addFolder(){

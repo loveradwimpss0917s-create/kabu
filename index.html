@@ -1998,9 +1998,18 @@ var POSITION_SETTINGS_KEY='kabu_position_settings';
 function posSettingsLoad(){
   try{
     var v=JSON.parse(localStorage.getItem(POSITION_SETTINGS_KEY)||'null');
-    if(v&&typeof v==='object')return {capital:v.capital||1000000, riskPct:v.riskPct||1, maxConcurrent:v.maxConcurrent||5};
+    if(v&&typeof v==='object')return {
+      capital:v.capital||1000000, riskPct:v.riskPct||1, maxConcurrent:v.maxConcurrent||5,
+      // 1銘柄上限(%): リスクベースの計算だけだと、値幅が狭い(低ボラ)銘柄で
+      // 口座資金の大部分を1銘柄に集中させてしまいうる。別枠で上限を設ける
+      maxPositionPct:v.maxPositionPct||25,
+      // 同一セクター上限: 個別銘柄の相関を直接計算する代わりに、業種が同じ銘柄への
+      // 同時保有数を制限することで集中リスクの代理指標とする
+      // （SECTOR_MAPは主要81銘柄のみのため、それ以外の銘柄は判定対象外）
+      maxPerSector:v.maxPerSector||2
+    };
   }catch(e){}
-  return {capital:1000000, riskPct:1, maxConcurrent:5};
+  return {capital:1000000, riskPct:1, maxConcurrent:5, maxPositionPct:25, maxPerSector:2};
 }
 function posSettingsSave(s){ localStorage.setItem(POSITION_SETTINGS_KEY, JSON.stringify(s)); }
 
@@ -2025,13 +2034,19 @@ function renderSimulator(cur,atr,vClass){
     '<div class="sim-input-wrap"><div class="sim-lbl">目標価格 (¥) <span style="color:var(--txt3)">ATR提案:¥'+sugTP+'</span></div><input class="sim-input" id="simTP" type="number" value="'+sugTP+'" step="1" inputmode="decimal"></div>'+
     '<div class="sim-input-wrap"><div class="sim-lbl">同時保有上限</div><input class="sim-input" id="simMaxConcurrent" type="number" value="'+ps.maxConcurrent+'" step="1" inputmode="numeric"></div>'+
     '</div>'+
+    '<div class="sim-row">'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">1銘柄上限 (%) <span style="color:var(--txt3)">集中回避</span></div><input class="sim-input" id="simMaxPositionPct" type="number" value="'+ps.maxPositionPct+'" step="1" min="1" max="100" inputmode="numeric"></div>'+
+    '<div class="sim-input-wrap"><div class="sim-lbl">同一セクター上限</div><input class="sim-input" id="simMaxPerSector" type="number" value="'+ps.maxPerSector+'" step="1" min="1" inputmode="numeric"></div>'+
+    '</div>'+
     '<button class="sim-btn" onclick="calcSimulator()">▶ 推奨株数を計算</button>'+
     '<div class="sim-result" id="simResult"></div>';
   show('simcard');
   setTimeout(calcSimulator,150);
 }
 
-// 推奨株数 = floor(資金 × リスク% ÷ 1株あたりリスク ÷ 100) × 100（単元100株に切り下げ）
+// 推奨株数 = floor(資金 × リスク% ÷ 1株あたりリスク ÷ 100) × 100（単元100株に切り下げ）。
+// これに加えて「1銘柄上限%」による頭打ちを適用する（低ボラ銘柄でリスクベースの
+// 計算だけだと口座資金の大部分を1銘柄に集中させてしまいうるため）
 function calcSimulator(){
   var capital=parseFloat(document.getElementById('simCapital').value);
   var riskPct=parseFloat(document.getElementById('simRiskPct').value);
@@ -2039,15 +2054,17 @@ function calcSimulator(){
   var sl=parseFloat(document.getElementById('simSL').value);
   var tp=parseFloat(document.getElementById('simTP').value);
   var maxConcurrent=parseInt(document.getElementById('simMaxConcurrent').value,10);
+  var maxPositionPct=parseFloat(document.getElementById('simMaxPositionPct').value);
+  var maxPerSector=parseInt(document.getElementById('simMaxPerSector').value,10);
   var el=document.getElementById('simResult');
   if(!el)return;
 
-  if(isNaN(capital)||capital<=0||isNaN(riskPct)||riskPct<=0||isNaN(entry)||entry<=0||isNaN(sl)||isNaN(tp)||isNaN(maxConcurrent)||maxConcurrent<1){
+  if(isNaN(capital)||capital<=0||isNaN(riskPct)||riskPct<=0||isNaN(entry)||entry<=0||isNaN(sl)||isNaN(tp)||isNaN(maxConcurrent)||maxConcurrent<1||isNaN(maxPositionPct)||maxPositionPct<=0||isNaN(maxPerSector)||maxPerSector<1){
     el.className='sim-result show';
     el.innerHTML='<div style="color:var(--red);font-size:11px;font-family:JetBrains Mono,monospace">入力値を確認してください</div>';
     return;
   }
-  posSettingsSave({capital:capital, riskPct:riskPct, maxConcurrent:maxConcurrent});
+  posSettingsSave({capital:capital, riskPct:riskPct, maxConcurrent:maxConcurrent, maxPositionPct:maxPositionPct, maxPerSector:maxPerSector});
 
   var perShareRisk=Math.abs(entry-sl);
   if(perShareRisk<=0){
@@ -2056,7 +2073,10 @@ function calcSimulator(){
     return;
   }
   var riskAmt=capital*riskPct/100;
-  var qty=Math.floor(Math.floor(riskAmt/perShareRisk)/100)*100;
+  var riskBasedQty=Math.floor(Math.floor(riskAmt/perShareRisk)/100)*100;
+  var positionCapQty=Math.floor(Math.floor((capital*maxPositionPct/100)/entry)/100)*100;
+  var qty=Math.min(riskBasedQty, positionCapQty);
+  var cappedByPosition=positionCapQty<riskBasedQty;
   var insufficientLot=qty<100;
   var requiredFunds=qty*entry;
   var overCapital=requiredFunds>capital;
@@ -2073,9 +2093,16 @@ function calcSimulator(){
   var openPos=openPositionsSummary();
   var atConcurrentLimit=openPos.count>=maxConcurrent;
 
+  // 相関の代理指標: 分析中の銘柄と同じ業種の保有数が上限に達していないか
+  // （SECTOR_MAPは主要81銘柄のみ収録。それ以外の銘柄は判定不能として明示する）
+  var curCode=_lastAnalysis?_lastAnalysis.code:null;
+  var curSector=curCode?SECTOR_MAP[curCode]:null;
+  var sectorCount=curSector?(openPos.bySector[curSector]||0):0;
+  var atSectorLimit=curSector&&sectorCount>=maxPerSector;
+
   var html='';
   if(insufficientLot){
-    html+='<div style="padding:8px;margin-bottom:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:11px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ リスク許容額に対し値幅が広すぎ、単元(100株)未満しか買えません。損切り幅を狭めるかリスク許容%を上げてください</div>';
+    html+='<div style="padding:8px;margin-bottom:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:11px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ '+(cappedByPosition?'1銘柄上限に対し':'リスク許容額に対し値幅が広すぎ、')+'単元(100株)未満しか買えません。'+(cappedByPosition?'1銘柄上限%を上げるか':'損切り幅を狭めるかリスク許容%を上げてください')+'</div>';
   }
   html+=
     '<div class="sim-res-grid">'+
@@ -2086,11 +2113,20 @@ function calcSimulator(){
     '<div class="sim-res-item"><div class="sim-res-lbl">目標時 利益</div><div class="sim-res-val" style="color:'+profColor+'">'+(profitTP>=0?'+':'')+'¥'+fmt(profitTP,0)+'<span style="font-size:10px;color:var(--txt3)"> (+'+targetPct.toFixed(1)+'%)</span></div></div>'+
     '<div class="sim-res-item"><div class="sim-res-lbl">損切り時 損失</div><div class="sim-res-val" style="color:'+lossColor+'">'+(lossSL>=0?'+':'')+'¥'+fmt(lossSL,0)+'<span style="font-size:10px;color:var(--txt3)"> (-'+riskPctActual.toFixed(1)+'%)</span></div></div>'+
     '</div>';
+  if(cappedByPosition&&!insufficientLot){
+    html+='<div style="margin-top:8px;padding:8px;background:rgba(245,181,53,.08);border-radius:6px;font-size:10px;color:var(--gold);font-family:JetBrains Mono,monospace">ℹ️ リスクベースの計算では'+riskBasedQty.toLocaleString()+'株でしたが、1銘柄上限('+maxPositionPct+'%=¥'+fmt(capital*maxPositionPct/100,0)+')により'+qty.toLocaleString()+'株に制限しました</div>';
+  }
   if(overCapital){
     html+='<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ 必要資金が口座資金（¥'+fmt(capital,0)+'）を超えています</div>';
   }
+  if(atSectorLimit){
+    html+='<div style="margin-top:8px;padding:8px;background:rgba(232,69,69,.08);border-radius:6px;font-size:10px;color:var(--red);font-family:JetBrains Mono,monospace">⚠ セクター集中: 「'+curSector+'」で既に'+sectorCount+'銘柄保有中（上限'+maxPerSector+'）。同業種への追加は値動きの相関が高く、分散になっていない可能性があります</div>';
+  }
   html+='<div style="margin-top:8px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;font-size:10px;color:var(--txt2);font-family:JetBrains Mono,monospace">'+
     '同時保有: '+openPos.count+' / '+maxConcurrent+'銘柄'+(atConcurrentLimit?' <span style="color:var(--red)">⚠ 上限到達</span>':'')+'<br>'+
+    (curSector
+      ?'この銘柄の業種「'+curSector+'」の保有数: '+sectorCount+' / '+maxPerSector+(atSectorLimit?' <span style="color:var(--red)">⚠ 上限到達</span>':'')
+      :'この銘柄は業種分類の対象外のため、セクター集中の判定はできません')+'<br>'+
     (openPos.riskKnownCount>0
       ?'保有中の合計リスク額（損切り価格が記録済みの'+openPos.riskKnownCount+'件分）: ¥'+fmt(openPos.totalRisk,0)
       :'保有中ポジションに損切り価格の記録がないため合計リスクは算出できません（取引記録時に損切り価格も入力してください）')+
@@ -2597,7 +2633,15 @@ function openPositionsSummary(){
   var totalRisk=withSL.reduce(function(sum,t){
     return sum + Math.abs(t.entry-t.sl)*(t.qty||0);
   },0);
-  return { count:trades.length, riskKnownCount:withSL.length, totalRisk:totalRisk };
+  // 業種別の保有数（相関の代理指標）。SECTOR_MAPは主要81銘柄のみのカバーのため、
+  // それ以外の銘柄は「業種不明」として集計から除外する
+  var bySector={};
+  trades.forEach(function(t){
+    var sec=SECTOR_MAP[t.code];
+    if(!sec)return;
+    bySector[sec]=(bySector[sec]||0)+1;
+  });
+  return { count:trades.length, riskKnownCount:withSL.length, totalRisk:totalRisk, bySector:bySector };
 }
 
 function deleteTrade(ts){

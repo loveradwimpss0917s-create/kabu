@@ -730,6 +730,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     <div class="scanner-market" id="scannerMarket"></div>
     <button class="sector-toggle-btn" id="sectorToggleBtn" onclick="toggleSectorView()">🏭 セクター相対強度を表示</button>
     <div class="sector-panel" id="sectorPanel" style="display:none"></div>
+    <button class="sector-toggle-btn" id="signalTrackToggleBtn" onclick="toggleSignalTrack()">📡 実運用の追跡結果を表示</button>
+    <div class="sector-panel" id="signalTrackPanel" style="display:none"></div>
     <div class="scanner-filters" id="scannerFilters">
       <button class="sf-btn active" data-filter="">ALL</button>
       <button class="sf-btn" data-filter="STRONG BUY">🚀 STRONG BUY</button>
@@ -3134,6 +3136,67 @@ function renderSectorStrength() {
       '</div>';
   }).join('');
   p.innerHTML = html + '<div class="sector-note">※ 直近スキャン結果（上位銘柄）のセクター別平均スコア。資金が向かっている業種ほど上位に表示されます。</div>';
+}
+
+// ── 実運用シグナルのアウトオブサンプル追跡 ──────────────────────────────
+// docs/検証結果まとめ_2026-08.md の検証はすべてイン・サンプル（過去データへの
+// 事後検証）だった。日次スキャンで実際に出したシグナルが20営業日経過すると
+// worker.jsのcronが結果を自動記録する。ここではその集計を表示するだけで、
+// フロント側では何も計算しない（/api/signal-trackが集計済みの値を返す）
+var _signalTrackOpen = false, _signalTrackLoaded = false;
+function toggleSignalTrack() {
+  _signalTrackOpen = !_signalTrackOpen;
+  var p = document.getElementById('signalTrackPanel');
+  var b = document.getElementById('signalTrackToggleBtn');
+  if (_signalTrackOpen) {
+    if (!_signalTrackLoaded) loadSignalTrack();
+    if (p) p.style.display = 'block';
+    if (b) { b.classList.add('active'); b.textContent = '📡 実運用の追跡結果を隠す'; }
+  } else {
+    if (p) p.style.display = 'none';
+    if (b) { b.classList.remove('active'); b.textContent = '📡 実運用の追跡結果を表示'; }
+  }
+}
+function loadSignalTrack() {
+  var p = document.getElementById('signalTrackPanel');
+  if (p) p.innerHTML = '<div class="sector-empty">読み込み中...</div>';
+  fetch('/api/signal-track').then(function(r) { return r.json(); }).then(function(d) {
+    _signalTrackLoaded = true;
+    renderSignalTrack(d);
+  }).catch(function() {
+    _signalTrackLoaded = false;
+    if (p) p.innerHTML = '<div class="sector-empty">読み込みに失敗しました</div>';
+  });
+}
+function renderSignalTrack(d) {
+  var p = document.getElementById('signalTrackPanel');
+  if (!p) return;
+  if (!d || !d.n) {
+    p.innerHTML = '<div class="sector-empty">まだ追跡データがありません。<br>日次スキャンで出たシグナルは20営業日経過すると自動的に結果が記録されます。</div>';
+    return;
+  }
+  var order = ['90-100', '75-90', '50-75', '30-50', '0-30'];
+  var byLabel = {};
+  (d.bands || []).forEach(function(b) { byLabel[b.label] = b; });
+  var html = order.map(function(label) {
+    var b = byLabel[label];
+    if (!b || !b.n) {
+      return '<div class="sector-row"><div class="sector-name">' + label + '</div><div class="sector-cnt" style="flex:1;text-align:left">データなし</div></div>';
+    }
+    var color = b.meanExcessPct >= 0 ? 'var(--green)' : 'var(--red)';
+    var sig = b.ci95[0] != null && (b.ci95[0] > 0 || b.ci95[1] < 0);
+    return '<div class="sector-row">' +
+      '<div class="sector-name">' + label + '</div>' +
+      '<div class="sector-val" style="color:' + color + ';flex:0 0 76px">' + (b.meanExcessPct >= 0 ? '+' : '') + b.meanExcessPct.toFixed(2) + '%</div>' +
+      '<div class="sector-cnt" style="flex:0 0 56px">n=' + b.n + '</div>' +
+      '<div class="sector-cnt" style="flex:0 0 40px;color:' + (sig ? 'var(--gold)' : 'var(--txt3)') + '">' + (sig ? '有意' : '') + '</div>' +
+      '</div>';
+  }).join('');
+  p.innerHTML =
+    '<div class="sector-note" style="margin-bottom:8px">実際に出したシグナルの追跡結果（20営業日後・同日スキャン銘柄平均比）<br>期間: ' + d.startDate + ' 〜 ' + d.endDate + '（n=' + d.n + '件）</div>' +
+    html +
+    '<div class="sector-note">※ イン・サンプル検証（docs/検証結果まとめ_2026-08.md）とは別の、実際のシグナルのアウト・オブ・サンプル追跡です。' +
+    'サンプルが少ないうちの信頼区間は参考程度に（銘柄横断の相関を補正していない簡易計算のため、本来より狭く出ます）。データが積み上がるほど信頼できます。</div>';
 }
 
 function loadScanner(force) {

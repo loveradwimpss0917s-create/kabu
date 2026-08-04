@@ -28,6 +28,10 @@
 |---|---|
 | `001_scan_results_unique.sql` | `scan_results` にupsert用のユニーク制約を追加 |
 | `002_backtest.sql` | バックテスト用テーブル（`backtest_jobs`, `backtest_signals`）を作成 |
+| `003_bt_cache.sql` | バックテスト用ユニバース・価格キャッシュ（`bt_universe`, `bt_prices_cache`）を作成 |
+| `004_earnings_calendar.sql` | 決算日キャッシュ（`earnings_calendar`）を作成 |
+| `005_sector_map.sql` | 業種分類キャッシュ（`sector_map`）を作成 |
+| `006_signal_outcomes.sql` | `scan_results` に `ret20`/`outcome_computed_at` を追加（実運用シグナルのアウトオブサンプル追跡用） |
 
 ### バックテストAPI（Phase3・研究用）
 

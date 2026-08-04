@@ -248,6 +248,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .rel-underperf-badge.tier-caution b{color:var(--yellow)}
 .rel-underperf-badge.tier-excluded{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.35);color:var(--txt2)}
 .rel-underperf-badge.tier-excluded b{color:var(--red)}
+/* 上位帯（劣後は確認されていない帯）にも実測サマリーを出すための中立スタイル */
+.rel-underperf-badge.tier-info{background:rgba(255,255,255,.04);border:1px solid var(--bdr);color:var(--txt2)}
+.ev-sep{height:1px;background:var(--bdr);margin:9px 0}
+.ev-market{color:var(--txt2)}
+.ev-under{color:var(--red)}
+.ev-unclear{color:var(--yellow)}
 .si-tier-note{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace;margin-top:2px}
 .scanner-item.tier-demoted{opacity:.55}
 .scanner-item.tier-demoted:active{opacity:.8}
@@ -865,27 +871,76 @@ function fmtB(v){if(v==null||isNaN(v))return '--';var a=Math.abs(v);if(a>=1e12)r
 function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function safeHref(u){try{var p=new URL(u,location.href);if(p.protocol==='http:'||p.protocol==='https:')return p.href;}catch(e){}return '#';}
 
-// バックテスト実測（2022-08〜2026-07、80銘柄、ブロックブートストラップ補正済みで有意性確認）に基づく
-// スコア帯別の相対劣後注記。30-75点は絶対リターンはプラス（PF>1・勝率55%超）だが
-// 市場平均対比の超過リターンが有意にマイナスだった帯（「損はしにくいが市場平均に劣後する」）。
-// 30点未満は買い候補から除外する
+// ── スコア帯の実測エビデンス（唯一の情報源） ────────────────────────────────
+// 出典: backtest/results/latest.md（対象期間 2017-08〜2026-07、3,575銘柄、
+// 約710万観測、20営業日保有、市場平均＝同日の全銘柄等加重平均との差）。
+//
+// 信頼区間には backtest/hypothesis-factors.mjs で較正した1.5倍の拡大を適用済み。
+// 移動ブロック・ブートストラップは日付方向の不確実性しか捉えられず銘柄横断方向を
+// 取りこぼすため標準誤差を約23%過小評価する（合成データで実測。補正なしでは
+// 効果ゼロのデータでも23%の頻度で「有意」と誤判定した）。
+//
+// verdict の意味:
+//   market  … 市場平均と統計的に区別できない（上回る力は確認されていない）
+//   under   … 市場平均に有意に劣後する
+//   unclear … 点推定は最下位だが、ばらつきが大きく統計的には確定できない
+//
+// この表を書き換えるときは必ず実測レポートの数値と突き合わせること。
+// 画面の文言をここから生成することで、表示が実測から乖離しないようにしている。
+var BAND_EVIDENCE=[
+  {min:90,max:101,label:'90-100',excess:-0.05,ci:[-0.51, 0.39],verdict:'market'},
+  {min:75,max:90, label:'75-90', excess:-0.04,ci:[-0.30, 0.18],verdict:'market'},
+  {min:50,max:75, label:'50-75', excess:-0.33,ci:[-0.48,-0.21],verdict:'under'},
+  {min:30,max:50, label:'30-50', excess:-0.35,ci:[-0.58,-0.14],verdict:'under'},
+  {min:0, max:30, label:'0-30',  excess:-0.37,ci:[-1.08, 0.31],verdict:'unclear'}
+];
+function bandEvidence(score){
+  for(var i=0;i<BAND_EVIDENCE.length;i++){
+    var b=BAND_EVIDENCE[i];
+    if(score>=b.min&&score<b.max) return b;
+  }
+  return null;
+}
+// 表示の強調度。under（有意に劣後）だけを強い警告にし、
+// unclear を「明確に下回る」と言い切らない（実測がそこまで示していないため）
 function relUnderperfTier(score){
-  if(score<30) return 'excluded';
-  if(score<75) return 'caution';
+  var b=bandEvidence(score);
+  if(!b) return null;
+  if(b.verdict==='under') return 'excluded';
+  if(b.verdict==='unclear') return 'caution';
   return null;
 }
 function relUnderperfMessage(score){
-  if(score<30){
-    return {title:'🚫 買い候補対象外',
-      body:'このスコア帯はバックテストで市場平均を明確に下回りました（超過リターンが有意にマイナス）。買い候補としては表示・優先しません。'};
+  var b=bandEvidence(score);
+  if(!b) return null;
+  var ciTxt='（20営業日の市場平均比 '+b.excess.toFixed(2)+'%／95%信頼区間 '+b.ci[0].toFixed(2)+'〜'+b.ci[1].toFixed(2)+'%）';
+  if(b.verdict==='under'){
+    return {title:'⚠️ 市場平均に劣後する帯',
+      body:'この帯は実測で市場平均に有意に劣後しました'+ciTxt+'。'+
+        '絶対リターンがプラスでも、同じ資金で市場全体を買った場合に負ける可能性が高い帯です。買い候補としては推奨しません。'};
   }
-  if(score<75){
-    var label = score<50 ? 'SELL帯' : 'NEUTRAL帯';
-    return {title:'⚠️ 劣後帯（'+label+'）',
-      body:'このスコア帯は、過去データ上「利益が出た割合」は高い一方、市場平均と比べた超過リターンはマイナスでした。'+
-        '「損をしにくいが、市場平均より稼ぎにくい」帯です。資金を投じるなら、より上位のスコア帯を優先してください。'};
+  if(b.verdict==='unclear'){
+    return {title:'情報: 最下位帯',
+      body:'この帯は点推定では最も成績が悪い帯ですが、ばらつきが大きく「市場平均を有意に下回る」とまでは統計的に確定できていません'+ciTxt+'。'+
+        'いずれにせよ上位帯より優先する根拠はありません。'};
   }
   return null;
+}
+// 上位帯も含めて必ず表示する実測サマリー。
+// 「上位帯なら勝てる」という誤解を防ぐことが目的なので、良い帯にこそ出す
+function bandEvidenceSummary(score){
+  var b=bandEvidence(score);
+  if(!b) return null;
+  var range='20営業日の市場平均比 '+b.excess.toFixed(2)+'%（95%CI '+b.ci[0].toFixed(2)+'〜'+b.ci[1].toFixed(2)+'%）';
+  if(b.verdict==='market'){
+    return {cls:'ev-market',
+      text:'実測: この帯は市場平均と統計的に区別できません。'+range+'。'+
+        'つまり「上位帯だから市場平均を上回る」という根拠はありません。劣後は確認されていない、という位置づけです。'};
+  }
+  if(b.verdict==='under'){
+    return {cls:'ev-under', text:'実測: 市場平均に有意に劣後。'+range+'。'};
+  }
+  return {cls:'ev-unclear', text:'実測: 点推定は最下位。'+range+'（統計的には確定せず）。'};
 }
 
 // ── MONITOR / NOTIFICATION ──────────────────────
@@ -1405,25 +1460,38 @@ async function analyze(){
     ringFill.style.stroke=sigColor;
     setTimeout(function(){ringFill.style.strokeDashoffset=circ*(1-score/100);},80);
     var signalBadge=document.getElementById('signalBadge');
-    signalBadge.textContent=ts.signalIcon+' '+ts.signal;
+    // 内部識別子(ts.signal='STRONG BUY'等)ではなく実測に即したラベルを表示する。
+    // 実測では75点以上に市場平均を上回る力が確認できていないため「BUY」表記はしない
+    signalBadge.textContent=ts.signalIcon+' '+(ts.signalLabel||ts.signalJa);
     signalBadge.className='signal-badge '+signalClass;
     document.getElementById('vtxt').textContent=ts.signalJa+' ('+stockName+')';
-    var subTexts={'strong-buy':'全条件揃い — 最高のエントリー機会','buy':'上昇トレンド継続中 — 買いエントリー検討','neutral':'明確な方向性なし — 様子見推奨','sell':'下落トレンド — 売り/ショート検討','strong-sell':'全指標悪化 — ポジション回避'};
+    // 「最高のエントリー機会」のような予測を示唆する文言は実測と矛盾するため使わない。
+    // テクニカルな状態そのものの説明にとどめる
+    var subTexts={'strong-buy':'テクニカル指標が最も揃っている状態','buy':'テクニカル指標が概ね揃っている状態','neutral':'明確な方向性なし','sell':'テクニカル指標が弱い状態','strong-sell':'テクニカル指標が最も弱い状態'};
     var subTxt=(daysToEarnings!=null)
       ?'⚠ 決算まで'+daysToEarnings+'日 — イベントリスク回避のためスコアを中立表示にしています'
       :(subTexts[signalClass]||'');
     document.getElementById('vsub').textContent=subTxt+'  |  スコア: '+score.toFixed(0)+'/100';
-    // スコア帯別の相対劣後注記（決算vetoで中立化している場合は別理由なので表示しない）
+    // スコア帯の実測エビデンス。上位帯にも必ず表示し「上位＝勝てる」という誤解を防ぐ。
+    // 決算vetoで中立化している場合はスコアが実態を表していないため表示しない
     var relBadgeEl=document.getElementById('relUnderperfBadge');
     if(relBadgeEl){
-      var relTier=(!ts.earningsVeto.active)?relUnderperfTier(score):null;
-      if(relTier){
-        var relMsg=relUnderperfMessage(score);
-        relBadgeEl.innerHTML='<b>'+relMsg.title+'</b>'+relMsg.body;
-        relBadgeEl.className='rel-underperf-badge tier-'+relTier;
-        relBadgeEl.style.display='block';
-      } else {
+      if(ts.earningsVeto.active){
         relBadgeEl.style.display='none';
+      } else {
+        var relTier=relUnderperfTier(score);
+        var relMsg=relTier?relUnderperfMessage(score):null;
+        var evSum=bandEvidenceSummary(score);
+        var html='';
+        if(relMsg) html+='<b>'+relMsg.title+'</b>'+relMsg.body;
+        if(evSum) html+=(html?'<div class="ev-sep"></div>':'')+'<span class="'+evSum.cls+'">'+evSum.text+'</span>';
+        if(html){
+          relBadgeEl.innerHTML=html;
+          relBadgeEl.className='rel-underperf-badge'+(relTier?' tier-'+relTier:' tier-info');
+          relBadgeEl.style.display='block';
+        } else {
+          relBadgeEl.style.display='none';
+        }
       }
     }
     // 地合いバッジ
@@ -3077,12 +3145,14 @@ function renderScannerList() {
     return;
   }
 
+  // 実測で75点以上に市場平均を上回る力は確認されていないため「BUY」表記は使わず、
+  // 相対的な順位帯を示すラベルにする（signalの値自体はDBの識別子として維持）
   var SIG_MAP = {
-    'STRONG BUY':  { cls:'strong-buy',  short:'🚀 S-BUY' },
-    'BUY':         { cls:'buy',          short:'📈 BUY' },
-    'NEUTRAL':     { cls:'neutral',      short:'➡ NEU' },
-    'SELL':        { cls:'sell',         short:'📉 SELL' },
-    'STRONG SELL': { cls:'strong-sell',  short:'⚠ S-SELL' }
+    'STRONG BUY':  { cls:'strong-buy',  short:'◎ 最上位' },
+    'BUY':         { cls:'buy',          short:'○ 上位' },
+    'NEUTRAL':     { cls:'neutral',      short:'△ 劣後' },
+    'SELL':        { cls:'sell',         short:'▽ 劣後' },
+    'STRONG SELL': { cls:'strong-sell',  short:'✕ 最下位' }
   };
 
   var html = '';

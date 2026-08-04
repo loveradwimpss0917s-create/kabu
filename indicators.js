@@ -271,21 +271,30 @@ export function calcTradeScore(opens, highs, lows, closes, volumes, summaryData,
 
   score = Math.max(0, Math.min(100, score));
 
-  let signal, signalClass, signalIcon, signalJa;
+  // ラベルについて（重要）:
+  // 3,575銘柄×10年（約710万観測）のバックテストで、75点以上の帯に市場平均を上回る力は
+  // 確認できなかった（20営業日の超過リターンは統計的に0と区別できない）。一方で
+  // 30-75点の帯は市場平均に有意に劣後した。したがって「買い」「強い買い」のように
+  // 上昇を予測しているかのような表示は実測と矛盾するため使わない。
+  // スコアの順位付け自体は妥当（帯とリターンの単調性 Spearman ρ=0.9）なので、
+  // 予測ではなく「相対的な順位帯」を示すラベルに統一する。
+  // signal（STRONG BUY等）はDB・スキャナーのフィルタで使う内部識別子として維持し、
+  // 画面表示にはsignalLabel/signalJaを使う。
+  let signal, signalClass, signalIcon, signalJa, signalLabel;
   if (earningsVeto.active) {
     // 数値そのものを中立化する（ラベルだけ書き換えると数値だけBUY相当のまま残ってしまうため）
     score = 50;
-    signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '⏸️'; signalJa = '決算前(様子見)';
-  } else if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; signalIcon = '🚀'; signalJa = '強い買い'; }
-  else if (score >= 75) { signal = 'BUY'; signalClass = 'buy'; signalIcon = '📈'; signalJa = '買い'; }
-  else if (score >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '⚖️'; signalJa = '中立'; }
-  else if (score >= 30) { signal = 'SELL'; signalClass = 'sell'; signalIcon = '📉'; signalJa = '売り'; }
-  else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; signalIcon = '⬇️'; signalJa = '強い売り'; }
+    signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '⏸️'; signalJa = '決算前(様子見)'; signalLabel = '決算前';
+  } else if (score >= 90) { signal = 'STRONG BUY'; signalClass = 'strong-buy'; signalIcon = '◎'; signalJa = '最上位帯'; signalLabel = '最上位帯'; }
+  else if (score >= 75) { signal = 'BUY'; signalClass = 'buy'; signalIcon = '○'; signalJa = '上位帯'; signalLabel = '上位帯'; }
+  else if (score >= 50) { signal = 'NEUTRAL'; signalClass = 'neutral'; signalIcon = '△'; signalJa = '劣後帯(中位)'; signalLabel = '劣後帯(中位)'; }
+  else if (score >= 30) { signal = 'SELL'; signalClass = 'sell'; signalIcon = '▽'; signalJa = '劣後帯(下位)'; signalLabel = '劣後帯(下位)'; }
+  else { signal = 'STRONG SELL'; signalClass = 'strong-sell'; signalIcon = '✕'; signalJa = '最下位帯'; signalLabel = '最下位帯'; }
 
   const vClass = earningsVeto.active ? 'hold' : (signalClass === 'buy' || signalClass === 'strong-buy') ? 'buy' : (signalClass === 'sell' || signalClass === 'strong-sell') ? 'sell' : 'hold';
 
   return {
-    score, signal, signalClass, signalIcon, signalJa, details, vClass,
+    score, signal, signalClass, signalIcon, signalJa, signalLabel, details, vClass,
     rsi, atrPct, gapPct, pct52w, nearHigh52w, volRatio,
     hist, isGC, isDC, macdGc: isGC, emaSignal, e20, e50, e200,
     earningsVeto, analystInfo

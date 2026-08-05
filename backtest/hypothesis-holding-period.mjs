@@ -149,8 +149,18 @@ function buildBlockedDateSequence(dateList, blockLength) {
 // 日付ごとに「上位帯の平均リターン」と「全銘柄の平均リターン(ベンチマーク)」を集計し、
 // その差＝グロス超過リターンを日次系列として持つ。コストはここでは引かない
 // （後段でコスト水準ごとに差し引くため）
+// 併せて「観測行ごとの平均」も計算する（run.mjsのaggregateBucketsと同じ重み付け）。
+// run.mjsは行ごとの平均で75-90帯に+0.256%のグロス超過を報告していたが、
+// 日ごとの平均ではほぼゼロになる。両方を出して差の有無を明示的に確認するため。
+//
+// どちらが正しいかは問いによる:
+//   日ごとの平均 … 毎日同じ資金を投じる実際の取引に対応する（候補が2銘柄でも
+//                  500銘柄でも、その日の成績は1日分として効く）。取引判断にはこちら
+//   行ごとの平均 … 上位帯の銘柄数が多い日ほど重く数える。上位帯が大量に出る日
+//                  （強気相場）に重みが偏るため、取引成績の指標としては不適切
 function buildDateStats(allRows, hz) {
   const stats = new Map();
+  let rowTopSum = 0, rowTopN = 0, rowBenchSumForTop = 0;
   for (const r of allRows) {
     const ret = r['ret' + hz];
     if (ret == null) continue;
@@ -159,12 +169,23 @@ function buildDateStats(allRows, hz) {
     s.all.sum += ret; s.all.n++;
     if (r.score >= TOP_BAND_MIN) { s.top.sum += ret; s.top.n++; }
   }
+  // 行ごとの平均: 上位帯の各行について (その行のリターン - その日のベンチマーク) を平均する
+  const benchOf = new Map();
+  for (const [date, s] of stats) if (s.all.n > 0) benchOf.set(date, s.all.sum / s.all.n);
+  for (const r of allRows) {
+    const ret = r['ret' + hz];
+    if (ret == null || r.score < TOP_BAND_MIN) continue;
+    const bm = benchOf.get(r.date);
+    if (bm == null) continue;
+    rowTopSum += ret; rowBenchSumForTop += bm; rowTopN++;
+  }
   const daily = new Map();
   for (const [date, s] of stats) {
     if (s.top.n === 0 || s.all.n === 0) continue;
     daily.set(date, s.top.sum / s.top.n - s.all.sum / s.all.n);
   }
-  return daily;
+  const rowWeightedExcess = rowTopN > 0 ? (rowTopSum - rowBenchSumForTop) / rowTopN : null;
+  return { daily, rowWeightedExcess, rowN: rowTopN };
 }
 
 async function main() {
@@ -189,7 +210,7 @@ async function main() {
 
   const results = [];
   for (const hz of CONFIG.horizons) {
-    const daily = buildDateStats(allRows, hz);
+    const { daily, rowWeightedExcess, rowN } = buildDateStats(allRows, hz);
     const dateList = [...daily.keys()].sort();
     if (!dateList.length) { console.log(`[${hz}日] 対象日なし`); continue; }
 
@@ -220,7 +241,7 @@ async function main() {
       };
     });
 
-    console.log(`[${hz}日] グロス超過=${round(point, 3)}% CI=[${ci}] 年${turnsPerYear.toFixed(1)}回転 有効ブロック数=${effectiveBlocks}`);
+    console.log(`[${hz}日] グロス超過(日ごと平均)=${round(point, 3)}% CI=[${ci}] / (行ごと平均)=${round(rowWeightedExcess, 3)}% 年${turnsPerYear.toFixed(1)}回転 有効ブロック数=${effectiveBlocks}`);
     for (const c of costs) {
       console.log(`   往復${c.roundTripPct.toFixed(2)}% → 1回転${c.netPerTradePct}% 年率${c.netAnnualPct}% ${c.profitableWithConfidence ? '✅' : '❌'}`);
     }
@@ -230,6 +251,10 @@ async function main() {
       turnsPerYear: round(turnsPerYear, 2),
       grossExcessPct: round(point, 3), grossExcessCI95: ci,
       grossSignificant: ci[0] != null && ci[0] > 0,
+      // 比較用: run.mjsと同じ行ごとの重み付け。両者が大きく違えば、
+      // 上位帯の銘柄数が多い日に重みが偏っていることを意味する
+      rowWeightedExcessPct: round(rowWeightedExcess, 3),
+      rowWeightedN: rowN,
       costScenarios: costs
     });
   }
@@ -284,6 +309,20 @@ function renderMarkdown(r) {
   L.push('|---|---|---|---|---|---|');
   for (const h of r.horizons) {
     L.push(`| ${h.horizonDays}日 | ${h.turnsPerYear} | ${h.grossExcessPct} | [${h.grossExcessCI95[0]}, ${h.grossExcessCI95[1]}] | ${h.grossSignificant ? '✅' : '❌'} | ${h.effectiveBlocks} |`);
+  }
+  L.push('');
+  L.push('### 重み付けの比較（日ごと平均 vs 行ごと平均）');
+  L.push('');
+  L.push('run.mjsは「行ごとの平均」で75-90帯に+0.256%のグロス超過を報告していた。');
+  L.push('両者が大きく違う場合、上位帯の銘柄数が多い日（強気相場）に重みが偏っていることを意味する。');
+  L.push('**実際の取引に対応するのは「日ごとの平均」**（毎日同じ資金を投じるなら、候補が2銘柄でも500銘柄でもその日は1日分として効くため）。');
+  L.push('');
+  L.push('| 保有期間 | 日ごと平均(%) | 行ごと平均(%) | 差 | 行数 |');
+  L.push('|---|---|---|---|---|');
+  for (const h of r.horizons) {
+    const diff = (h.rowWeightedExcessPct != null && h.grossExcessPct != null)
+      ? (h.rowWeightedExcessPct - h.grossExcessPct).toFixed(3) : '-';
+    L.push(`| ${h.horizonDays}日 | ${h.grossExcessPct} | ${h.rowWeightedExcessPct} | ${diff} | ${h.rowWeightedN} |`);
   }
   L.push('');
   L.push('## コスト差引後の年率');

@@ -1,0 +1,248 @@
+{
+  "runId": "2026-08-05T07-14-18-199Z",
+  "purpose": "上位スコア帯(75点以上)の優位性が、保有期間を延ばすことでコストを上回る構造になるかの検証",
+  "rationale": "backtest/results/latest.mdの報告値には往復0.30%のコストが最初から差し引かれていた。コストを戻すと上位帯には20営業日あたり約+0.25%のグロス優位性が存在する。コストは1往復あたり固定なので、保有期間を延ばせば1回のコストで得られるグロスが増える。この検証はその一点だけを問うものであり、新しい仮説の探索ではない。",
+  "preRegistration": "保有期間・コスト水準・上位帯の定義(75点以上)は実行前に固定した。全結果を良し悪しに関わらず報告する。",
+  "limitation": "保有期間が長いほど前方リターンの窓が重なるためブロック長を伸ばしており、その分だけ有効ブロック数が減り検出力が落ちる。各保有期間のeffectiveBlocksを確認すること。また本検証はイン・サンプルであり、実運用前にアウト・オブ・サンプル検証が必須である。",
+  "config": {
+    "horizons": [
+      20,
+      40,
+      60,
+      120
+    ],
+    "warmupBars": 250,
+    "bootstrapIters": 1000,
+    "ciInflation": 1.5,
+    "tradingDaysPerYear": 250
+  },
+  "topBandMin": 75,
+  "coverage": {
+    "stockCount": 3658,
+    "skipped": 84,
+    "totalObservations": 6743884
+  },
+  "horizons": [
+    {
+      "horizonDays": 20,
+      "tradingDays": 2092,
+      "blockLength": 40,
+      "effectiveBlocks": 52,
+      "turnsPerYear": 12.5,
+      "grossExcessPct": -0.006,
+      "grossExcessCI95": [
+        -0.446,
+        0.335
+      ],
+      "grossSignificant": false,
+      "costScenarios": [
+        {
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.306,
+          "netCI95": [
+            -0.746,
+            0.035
+          ],
+          "netAnnualPct": -3.82,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.2,
+          "netPerTradePct": -0.206,
+          "netCI95": [
+            -0.646,
+            0.135
+          ],
+          "netAnnualPct": -2.57,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.106,
+          "netCI95": [
+            -0.546,
+            0.235
+          ],
+          "netAnnualPct": -1.32,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.05,
+          "netPerTradePct": -0.056,
+          "netCI95": [
+            -0.496,
+            0.285
+          ],
+          "netAnnualPct": -0.7,
+          "profitableWithConfidence": false
+        }
+      ]
+    },
+    {
+      "horizonDays": 40,
+      "tradingDays": 2092,
+      "blockLength": 80,
+      "effectiveBlocks": 26,
+      "turnsPerYear": 6.25,
+      "grossExcessPct": 0.094,
+      "grossExcessCI95": [
+        -0.578,
+        0.647
+      ],
+      "grossSignificant": false,
+      "costScenarios": [
+        {
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.206,
+          "netCI95": [
+            -0.878,
+            0.347
+          ],
+          "netAnnualPct": -1.29,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.2,
+          "netPerTradePct": -0.106,
+          "netCI95": [
+            -0.778,
+            0.447
+          ],
+          "netAnnualPct": -0.66,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.1,
+          "netPerTradePct": -0.006,
+          "netCI95": [
+            -0.678,
+            0.547
+          ],
+          "netAnnualPct": -0.04,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.05,
+          "netPerTradePct": 0.044,
+          "netCI95": [
+            -0.628,
+            0.597
+          ],
+          "netAnnualPct": 0.28,
+          "profitableWithConfidence": false
+        }
+      ]
+    },
+    {
+      "horizonDays": 60,
+      "tradingDays": 2092,
+      "blockLength": 120,
+      "effectiveBlocks": 17,
+      "turnsPerYear": 4.17,
+      "grossExcessPct": 0.183,
+      "grossExcessCI95": [
+        -0.699,
+        0.833
+      ],
+      "grossSignificant": false,
+      "costScenarios": [
+        {
+          "roundTripPct": 0.3,
+          "netPerTradePct": -0.117,
+          "netCI95": [
+            -0.999,
+            0.533
+          ],
+          "netAnnualPct": -0.49,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.2,
+          "netPerTradePct": -0.017,
+          "netCI95": [
+            -0.899,
+            0.633
+          ],
+          "netAnnualPct": -0.07,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.1,
+          "netPerTradePct": 0.083,
+          "netCI95": [
+            -0.799,
+            0.733
+          ],
+          "netAnnualPct": 0.35,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.05,
+          "netPerTradePct": 0.133,
+          "netCI95": [
+            -0.749,
+            0.783
+          ],
+          "netAnnualPct": 0.56,
+          "profitableWithConfidence": false
+        }
+      ]
+    },
+    {
+      "horizonDays": 120,
+      "tradingDays": 2092,
+      "blockLength": 240,
+      "effectiveBlocks": 8,
+      "turnsPerYear": 2.08,
+      "grossExcessPct": 0.43,
+      "grossExcessCI95": [
+        -1.294,
+        1.511
+      ],
+      "grossSignificant": false,
+      "costScenarios": [
+        {
+          "roundTripPct": 0.3,
+          "netPerTradePct": 0.13,
+          "netCI95": [
+            -1.594,
+            1.211
+          ],
+          "netAnnualPct": 0.27,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.2,
+          "netPerTradePct": 0.23,
+          "netCI95": [
+            -1.494,
+            1.311
+          ],
+          "netAnnualPct": 0.48,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.1,
+          "netPerTradePct": 0.33,
+          "netCI95": [
+            -1.394,
+            1.411
+          ],
+          "netAnnualPct": 0.69,
+          "profitableWithConfidence": false
+        },
+        {
+          "roundTripPct": 0.05,
+          "netPerTradePct": 0.38,
+          "netCI95": [
+            -1.344,
+            1.461
+          ],
+          "netAnnualPct": 0.79,
+          "profitableWithConfidence": false
+        }
+      ]
+    }
+  ],
+  "bestProfitable": null
+}

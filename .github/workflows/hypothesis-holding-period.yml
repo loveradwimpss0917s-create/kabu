@@ -1,0 +1,47 @@
+name: 仮説検証 上位帯×保有期間（研究用・手動実行）
+
+# 上位スコア帯(75点以上)には20営業日あたり約+0.25%のグロス優位性が存在するが、
+# 往復0.30%のコストがそれを丸ごと食い尽くしている（docs/検証結果まとめ_2026-08.md）。
+# コストは1往復あたり固定なので、保有期間を延ばせば1回のコストで得られるグロスが増える。
+# その一点だけを検証する。
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_iters:
+        description: 'ブートストラップ試行回数'
+        required: false
+        default: '1000'
+      ci_inflation:
+        description: '信頼区間の拡大倍率（較正値=1.5。通常は変更しない）'
+        required: false
+        default: '1.5'
+
+permissions:
+  contents: write
+
+jobs:
+  holding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 上位帯×保有期間の検証を実行
+        env:
+          BT_BOOTSTRAP_ITERS: ${{ inputs.bootstrap_iters }}
+          BT_CI_INFLATION: ${{ inputs.ci_inflation }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/hypothesis-holding-period.mjs
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: 上位帯×保有期間の検証結果を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

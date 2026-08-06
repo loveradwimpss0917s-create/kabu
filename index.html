@@ -370,6 +370,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .cost-annual.ok{background:rgba(0,224,140,.06);border:1px solid rgba(0,224,140,.25);color:var(--txt2)}
 .cost-annual.ok b{color:var(--green)}
 .cost-net{margin-top:6px}
+/* 事前仮説の記入欄。プロセス評価（勝敗と判断品質の分離）のための入力 */
+.tj-thesis-box{background:rgba(43,138,255,.05);border:1px solid rgba(43,138,255,.25);border-radius:8px;padding:10px;margin-bottom:8px}
+.tj-thesis-ttl{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--blue);margin-bottom:8px}
+/* 決済時のレビュー（仮説は正しかったか） */
+.tj-review-box{background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-radius:8px;padding:10px;margin-top:8px}
+.tj-review-q{font-size:11px;color:var(--txt2);margin-bottom:8px;line-height:1.6}
+.tj-review-btns{display:flex;gap:6px;flex-wrap:wrap}
+.tj-review-btn{flex:1;min-width:120px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;color:var(--txt2);font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all .15s}
+.tj-review-btn:hover{border-color:var(--bdr2);color:var(--txt)}
+.tj-review-btn.correct{border-color:rgba(0,224,140,.4)}
+.tj-review-btn.wrong{border-color:rgba(255,61,90,.4)}
+.tj-thesis-view{font-size:10px;color:var(--txt2);font-family:'JetBrains Mono',monospace;line-height:1.6;margin-top:4px;padding-left:8px;border-left:2px solid var(--bdr)}
+.tj-quad{display:inline-block;padding:2px 7px;border-radius:5px;font-size:9px;font-family:'JetBrains Mono',monospace;margin-left:6px}
+.tj-quad.ideal{background:rgba(0,224,140,.15);color:var(--green)}
+.tj-quad.unlucky{background:rgba(245,181,53,.15);color:var(--gold)}
+.tj-quad.lucky{background:rgba(255,61,90,.2);color:var(--red)}
+.tj-quad.expected{background:rgba(255,255,255,.08);color:var(--txt2)}
 
 /* FINANCIAL ALERT */
 .fa-alert{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px}
@@ -780,8 +797,38 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
       <div class="tj-form-row">
         <input class="tj-input" id="tjSL" placeholder="損切り価格 (¥) 任意・保有中リスク集計用" inputmode="decimal">
       </div>
+      <!-- 事前の仮説記述。プロのトレードレビューは「勝ったか」と「判断が正しかったか」を
+           分けて評価する。そのためには建てる前に仮説と反証条件を書き残す必要がある -->
+      <div class="tj-thesis-box">
+        <div class="tj-thesis-ttl">■ 建てる前に書く（プロセス評価用）</div>
+        <div class="tj-form-row">
+          <select class="tj-select" id="tjThesisCat">
+            <option value="">根拠の種類を選択…</option>
+            <option value="決算・業績">決算・業績</option>
+            <option value="材料・ニュース">材料・ニュース</option>
+            <option value="テクニカル">テクニカル</option>
+            <option value="需給・出来高">需給・出来高</option>
+            <option value="バリュエーション">バリュエーション</option>
+            <option value="セクター・テーマ">セクター・テーマ</option>
+            <option value="その他">その他</option>
+          </select>
+          <select class="tj-select" id="tjHorizon">
+            <option value="">想定期間…</option>
+            <option value="数日">数日</option>
+            <option value="1〜2週間">1〜2週間</option>
+            <option value="1〜3ヶ月">1〜3ヶ月</option>
+            <option value="半年以上">半年以上</option>
+          </select>
+        </div>
+        <div class="tj-form-row">
+          <input class="tj-input" id="tjThesis" placeholder="仮説: なぜ上がると考えるのか">
+        </div>
+        <div class="tj-form-row">
+          <input class="tj-input" id="tjFalsify" placeholder="反証条件: 何が起きたら「間違いだった」と認めるか">
+        </div>
+      </div>
       <div class="tj-form-row">
-        <input class="tj-input" id="tjMemo" placeholder="メモ（根拠・反省など）任意">
+        <input class="tj-input" id="tjMemo" placeholder="メモ（任意）">
       </div>
       <button class="tj-add-btn" onclick="addTrade()">＋ 取引を記録</button>
     </div>
@@ -2603,6 +2650,10 @@ function addTrade(){
   var exitV=parseFloat(document.getElementById('tjExit').value);
   var slV=parseFloat(document.getElementById('tjSL').value);
   var memo=(document.getElementById('tjMemo').value||'').trim();
+  var thesis=(document.getElementById('tjThesis').value||'').trim();
+  var falsify=(document.getElementById('tjFalsify').value||'').trim();
+  var thesisCat=document.getElementById('tjThesisCat').value||'';
+  var horizon=document.getElementById('tjHorizon').value||'';
   if(!/^\d{4}$/.test(code)){alert('4桁の銘柄コードを入力してください');return;}
   if(isNaN(entry)||entry<=0){alert('エントリー価格を入力してください');return;}
   if(isNaN(qty)||qty<1)qty=100;
@@ -2614,9 +2665,16 @@ function addTrade(){
     code:code, dir:dir, qty:qty, entry:entry,
     exit:isNaN(exitV)?null:exitV,
     sl:isNaN(slV)?null:slV,
-    memo:memo, ts:Date.now(), sig:sig, sigScore:sigScore
+    memo:memo, ts:Date.now(), sig:sig, sigScore:sigScore,
+    // プロセス評価用。thesisCorrectは決済後にレビューで記録する（未評価はnull）
+    thesis:thesis||null, falsify:falsify||null, thesisCat:thesisCat||null,
+    horizon:horizon||null, thesisCorrect:null
   });
   tjSave(arr);
+  document.getElementById('tjThesis').value='';
+  document.getElementById('tjFalsify').value='';
+  document.getElementById('tjThesisCat').value='';
+  document.getElementById('tjHorizon').value='';
   document.getElementById('tjCode').value='';
   document.getElementById('tjEntry').value='';
   document.getElementById('tjExit').value='';
@@ -2647,6 +2705,28 @@ function openPositionsSummary(){
 function deleteTrade(ts){
   if(!confirm('この取引記録を削除しますか？'))return;
   tjSave(tjLoad().filter(function(t){return t.ts!==ts;}));
+  renderTradeJournal();
+}
+
+// ── プロセス評価（勝敗と判断品質の分離） ──────────────────────────────
+// プロのトレードレビューは「勝ったか」と「仮説が正しかったか」を別々に評価する。
+// 特に「仮説は間違っていたのに勝った」は最も危険な象限で、悪い判断が報酬で
+// 強化されるため必ず後で大きく負ける。これを可視化することが目的。
+function tjQuadrant(t){
+  var pl=tjPL(t);
+  if(pl==null||t.thesisCorrect==null)return null;
+  var won=pl>0;
+  if(t.thesisCorrect&&won) return {key:'ideal', label:'◎ 正しい判断で勝ち', cls:'ideal'};
+  if(t.thesisCorrect&&!won) return {key:'unlucky', label:'○ 判断は正しく不運', cls:'unlucky'};
+  if(!t.thesisCorrect&&won) return {key:'lucky', label:'⚠ 判断が誤りだが勝ち（運）', cls:'lucky'};
+  return {key:'expected', label:'— 判断が誤りで負け', cls:'expected'};
+}
+function reviewTrade(ts, correct){
+  var arr=tjLoad();
+  var t=arr.filter(function(x){return x.ts===ts;})[0];
+  if(!t)return;
+  t.thesisCorrect=correct;
+  tjSave(arr);
   renderTradeJournal();
 }
 
@@ -2683,6 +2763,29 @@ function renderTradeJournal(){
       '<span>'+fmt(t.qty,0)+'株</span>'+
       (t.exit==null&&t.sl!=null?'<span style="color:var(--txt3)">SL ¥'+fmt(t.sl,1)+'</span>':'');
     var plHtml=pl!=null?'<span class="tj-item-pl '+(pl>=0?'up':'dn')+'">'+(pl>=0?'+':'')+'¥'+fmt(pl,0)+'</span>':'';
+    var esc=function(s){return String(s).replace(/</g,'&lt;');};
+    // 事前に書いた仮説・反証条件を表示（保有中は自分の判断基準の確認に、決済後はレビューに使う）
+    var thesisHtml='';
+    if(t.thesis||t.falsify||t.thesisCat){
+      thesisHtml='<div class="tj-thesis-view">'+
+        (t.thesisCat?'<b>'+esc(t.thesisCat)+'</b>'+(t.horizon?'（'+esc(t.horizon)+'）':'')+'<br>':'')+
+        (t.thesis?'仮説: '+esc(t.thesis)+'<br>':'')+
+        (t.falsify?'反証条件: '+esc(t.falsify):'')+
+        '</div>';
+    }
+    // レビュー済みなら4象限バッジを損益の隣に、未レビューなら仮説の下に問いを出す
+    var quad=tjQuadrant(t);
+    var quadHtml=quad?'<span class="tj-quad '+quad.cls+'">'+quad.label+'</span>':'';
+    var reviewHtml='';
+    if(!quad&&pl!=null&&(t.thesis||t.falsify)){
+      reviewHtml='<div class="tj-review-box">'+
+        '<div class="tj-review-q">この取引の<b>仮説は正しかったですか？</b><br>'+
+        '<span style="color:var(--txt3)">勝ち負けではなく、エントリー時の判断根拠が結果的に妥当だったかで答えてください。</span></div>'+
+        '<div class="tj-review-btns">'+
+        '<button class="tj-review-btn correct" onclick="reviewTrade('+t.ts+',true)">仮説は正しかった</button>'+
+        '<button class="tj-review-btn wrong" onclick="reviewTrade('+t.ts+',false)">仮説は誤りだった</button>'+
+        '</div></div>';
+    }
     return '<div class="tj-item">'+
       '<div class="tj-item-top">'+
         '<span class="tj-item-code" onclick="qs(\''+t.code+'\')" style="cursor:pointer">'+t.code+'</span>'+sec+
@@ -2690,8 +2793,10 @@ function renderTradeJournal(){
         '<span class="tj-item-date">'+dateStr+'</span>'+
         '<span class="tj-item-del" onclick="deleteTrade('+t.ts+')">🗑</span>'+
       '</div>'+
-      '<div class="tj-item-mid">'+mid+plHtml+'</div>'+
-      (t.memo?'<div class="tj-item-memo">📝 '+t.memo.replace(/</g,'&lt;')+'</div>':'')+
+      '<div class="tj-item-mid">'+mid+plHtml+quadHtml+'</div>'+
+      thesisHtml+
+      reviewHtml+
+      (t.memo?'<div class="tj-item-memo">📝 '+esc(t.memo)+'</div>':'')+
       '</div>';
   }).join('');
 }
@@ -2740,6 +2845,7 @@ function renderTradeDashboard(){
     cell('平均損失', '¥'+fmt(avgLoss,0), 'var(--red)')+
     '</div></div>';
 
+  html+=renderProcessSection(closed);
   html+=renderCostSection(closed, avgRet);
 
   // 方向別
@@ -2841,6 +2947,63 @@ function renderCostSection(closed, avgRetPct){
   html+='</div>';
   return html;
 }
+// プロセス品質の集計。プロのトレードレビューと同じく、勝敗と判断品質を分けて見る。
+// 「仮説が誤りなのに勝った」割合が高い場合、悪い判断が結果で強化されている状態であり、
+// 統計的にはいずれ大きく負ける。これを名指しで警告することが本セクションの目的。
+function renderProcessSection(closed){
+  var reviewed=closed.filter(function(t){return t.thesisCorrect!=null;});
+  var head='<div class="tj-dash-ttl">■ プロセス品質（判断と結果の分離）</div>';
+  if(!reviewed.length){
+    return '<div class="tj-dash-sec">'+head+
+      '<div class="tj-dash-empty">まだレビュー済みの取引がありません。<br>'+
+      '取引を記録する際に「仮説」「反証条件」を書き、決済後に仮説の正否を評価すると、<br>'+
+      '「正しい判断で勝てているか」「運で勝っているだけか」が分かります。</div></div>';
+  }
+  var q={ideal:0,unlucky:0,lucky:0,expected:0};
+  reviewed.forEach(function(t){ var x=tjQuadrant(t); if(x)q[x.key]++; });
+  var n=reviewed.length;
+  var pct=function(v){return (v/n*100).toFixed(0)+'%';};
+  var correctRate=(q.ideal+q.unlucky)/n*100;
+
+  var html='<div class="tj-dash-sec">'+head+
+    '<div class="tj-dash-grid">'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">◎ 正しい判断で勝ち</div><div class="tj-dash-num" style="color:var(--green)">'+q.ideal+' ('+pct(q.ideal)+')</div></div>'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">○ 判断は正しく不運</div><div class="tj-dash-num" style="color:var(--gold)">'+q.unlucky+' ('+pct(q.unlucky)+')</div></div>'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">⚠ 誤りだが勝ち（運）</div><div class="tj-dash-num" style="color:var(--red)">'+q.lucky+' ('+pct(q.lucky)+')</div></div>'+
+    '<div class="tj-dash-cell"><div class="tj-dash-lbl">— 誤りで負け</div><div class="tj-dash-num">'+q.expected+' ('+pct(q.expected)+')</div></div>'+
+    '</div>'+
+    '<div class="tj-dash-empty" style="text-align:left;padding:8px 2px">判断の的中率（勝敗と無関係）: <b style="color:'+(correctRate>=50?'var(--green)':'var(--gold)')+'">'+correctRate.toFixed(0)+'%</b>（'+n+'件中）</div>';
+
+  if(q.lucky>0&&q.lucky/n>=0.3){
+    html+='<div class="cost-annual warn"><b>⚠️ 運で勝っている割合が高い</b>'+
+      '判断が誤っていたのに勝った取引が'+pct(q.lucky)+'を占めています。'+
+      'この状態は悪い判断が利益で強化されるため、続けると大きな損失につながりやすい典型的なパターンです。'+
+      '勝った取引こそ「本当に想定通りだったか」を厳しく見てください。</div>';
+  }
+
+  // 根拠カテゴリ別の成績。自分のどの根拠が実際に機能しているかを知るため
+  var byCat={};
+  reviewed.forEach(function(t){
+    var c=t.thesisCat||'未分類';
+    if(!byCat[c])byCat[c]={n:0,correct:0,pl:0};
+    byCat[c].n++;
+    if(t.thesisCorrect)byCat[c].correct++;
+    byCat[c].pl+=tjPL(t)||0;
+  });
+  var cats=Object.keys(byCat);
+  if(cats.length){
+    html+='<div class="tj-dash-ttl" style="margin-top:10px">根拠の種類別</div>';
+    cats.sort(function(a,b){return byCat[b].n-byCat[a].n;}).forEach(function(c){
+      var s=byCat[c], rate=s.correct/s.n*100;
+      var col=rate>=50?'var(--green)':'var(--gold)';
+      html+='<div class="tj-dash-row"><div class="tj-dash-row-name">'+c.replace(/</g,'&lt;')+'</div>'+
+        '<div class="tj-dash-bar"><div class="tj-dash-bar-fill" style="width:'+rate+'%;background:'+col+'"></div></div>'+
+        '<div class="tj-dash-row-val" style="color:'+col+'">判断'+rate.toFixed(0)+'% '+(s.pl>=0?'+':'')+'¥'+fmt(s.pl,0)+'</div></div>';
+    });
+  }
+  return html+'</div>';
+}
+
 function updateCostSettings(){
   var fee=parseFloat(document.getElementById('costFeeBps').value);
   var slip=parseFloat(document.getElementById('costSlipBps').value);

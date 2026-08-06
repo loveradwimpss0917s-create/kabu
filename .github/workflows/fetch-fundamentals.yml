@@ -1,0 +1,35 @@
+name: PIT財務データ記録（週次自動実行）
+
+# バリュー・クオリティ系ファクター検証のためのPoint-in-Time財務データを
+# 毎週スナップショットする。
+#
+# 過去時点の財務データは無料では入手できないため、今日から記録を始めるしかない。
+# 1日実行が遅れれば1週間分のデータが永久に失われる。
+# 詳細は migrations/007_fundamentals_pit.sql の冒頭コメントを参照。
+on:
+  schedule:
+    - cron: '43 19 * * 6'  # 毎週土曜 19:43 UTC（日本時間 日曜 4:43）
+  workflow_dispatch:
+    inputs:
+      time_budget_min:
+        description: '1回の実行の時間予算（分）'
+        required: false
+        default: '170'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: PIT財務データをスナップショット
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FD_TIME_BUDGET_MIN: ${{ inputs.time_budget_min }}
+        run: node scripts/fetch-fundamentals.mjs

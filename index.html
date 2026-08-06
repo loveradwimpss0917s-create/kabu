@@ -749,6 +749,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
     <div class="sector-panel" id="sectorPanel" style="display:none"></div>
     <button class="sector-toggle-btn" id="signalTrackToggleBtn" onclick="toggleSignalTrack()">📡 実運用の追跡結果を表示</button>
     <div class="sector-panel" id="signalTrackPanel" style="display:none"></div>
+    <button class="sector-toggle-btn" id="strategyToggleBtn" onclick="toggleStrategySim()">📈 シグナル通り売買した場合の成績を表示</button>
+    <div class="sector-panel" id="strategyPanel" style="display:none"></div>
     <div class="scanner-filters" id="scannerFilters">
       <button class="sf-btn active" data-filter="">ALL</button>
       <button class="sf-btn" data-filter="STRONG BUY">🚀 STRONG BUY</button>
@@ -3404,6 +3406,99 @@ function renderSignalTrack(d) {
     html +
     '<div class="sector-note">※ イン・サンプル検証（docs/検証結果まとめ_2026-08.md）とは別の、実際のシグナルのアウト・オブ・サンプル追跡です。' +
     'サンプルが少ないうちの信頼区間は参考程度に（銘柄横断の相関を補正していない簡易計算のため、本来より狭く出ます）。データが積み上がるほど信頼できます。</div>';
+}
+
+// ── シグナル通り売買した場合の資産推移 ──────────────────────────────
+// backtest/simulate-signal-strategy.mjs が出力したJSONを読んで表示する。
+// フロント側では計算しない（数字が2箇所で食い違う事故を避けるため）。
+var _strategyOpen=false, _strategyLoaded=false;
+function toggleStrategySim(){
+  _strategyOpen=!_strategyOpen;
+  var p=document.getElementById('strategyPanel');
+  var b=document.getElementById('strategyToggleBtn');
+  if(_strategyOpen){
+    if(!_strategyLoaded)loadStrategySim();
+    if(p)p.style.display='block';
+    if(b){b.classList.add('active');b.textContent='📈 シグナル通り売買した場合の成績を隠す';}
+  }else{
+    if(p)p.style.display='none';
+    if(b){b.classList.remove('active');b.textContent='📈 シグナル通り売買した場合の成績を表示';}
+  }
+}
+function loadStrategySim(){
+  var p=document.getElementById('strategyPanel');
+  if(p)p.innerHTML='<div class="sector-empty">読み込み中...</div>';
+  fetch('/backtest/results/strategy-latest.json?_t='+Date.now())
+    .then(function(r){ if(!r.ok)throw new Error('not found'); return r.json(); })
+    .then(function(d){ _strategyLoaded=true; renderStrategySim(d); })
+    .catch(function(){
+      _strategyLoaded=false;
+      if(p)p.innerHTML='<div class="sector-empty">まだシミュレーション結果がありません。<br>GitHub Actionsの「シグナル通り売買した場合の資産推移」を実行すると表示されます。</div>';
+    });
+}
+function renderStrategySim(d){
+  var p=document.getElementById('strategyPanel');
+  if(!p)return;
+  if(!d||!d.strategies||!d.strategies.length){
+    p.innerHTML='<div class="sector-empty">データがありません</div>';
+    return;
+  }
+  var b=d.benchmark;
+  // ベンチマークと各戦略を同じ縦軸で重ねて描くため、全系列の最小・最大を揃える
+  var all=[b].concat(d.strategies);
+  var W=280,H=90;
+  var globalVals=[];
+  all.forEach(function(s){ (s.curve||[]).forEach(function(pt){ globalVals.push(pt.equity); }); });
+  var gMin=Math.min.apply(null,globalVals), gMax=Math.max.apply(null,globalVals);
+  var gRange=(gMax-gMin)||1;
+  function lineFor(curve,color){
+    if(!curve||curve.length<2)return '';
+    var pts=curve.map(function(pt,i){
+      var x=i/(curve.length-1)*W;
+      var y=H-((pt.equity-gMin)/gRange)*H;
+      return x.toFixed(1)+','+y.toFixed(1);
+    }).join(' ');
+    return '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.6"/>';
+  }
+  var COLORS={strongbuy:'var(--green)',buyplus:'var(--blue)',neutralplus:'var(--gold)',worst:'var(--red)'};
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;display:block;margin:6px 0">'+
+    lineFor(b.curve,'rgba(255,255,255,.45)')+
+    d.strategies.map(function(s){ return lineFor(s.curve, COLORS[s.key]||'var(--txt2)'); }).join('')+
+    '</svg>';
+
+  var legend='<div style="font-size:9px;font-family:JetBrains Mono,monospace;color:var(--txt3);line-height:1.8;margin-bottom:6px">'+
+    '<span style="color:rgba(255,255,255,.65)">━</span> 何もせず全銘柄保有（ベンチマーク）　'+
+    d.strategies.map(function(s){
+      return '<span style="color:'+(COLORS[s.key]||'var(--txt2)')+'">━</span> '+s.label.replace(/（.*/,'');
+    }).join('　')+'</div>';
+
+  var rows='<div class="sector-row" style="font-size:9px;color:var(--txt3);border-bottom:1px solid var(--bdr);padding-bottom:4px">'+
+    '<div style="flex:1">戦略</div><div style="flex:0 0 58px;text-align:right">最終資産</div>'+
+    '<div style="flex:0 0 52px;text-align:right">年率</div><div style="flex:0 0 52px;text-align:right">最大DD</div></div>';
+  function row(s,color,isBench){
+    return '<div class="sector-row">'+
+      '<div style="flex:1;font-size:10px;color:'+(color||'var(--txt)')+'">'+s.label+'</div>'+
+      '<div style="flex:0 0 58px;text-align:right;font-family:JetBrains Mono,monospace;font-size:10px;color:'+(s.finalEquity>=100?'var(--green)':'var(--red)')+'">'+s.finalEquity+'</div>'+
+      '<div style="flex:0 0 52px;text-align:right;font-family:JetBrains Mono,monospace;font-size:10px;color:'+(s.cagrPct>=0?'var(--green)':'var(--red)')+'">'+(s.cagrPct>=0?'+':'')+s.cagrPct+'%</div>'+
+      '<div style="flex:0 0 52px;text-align:right;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--txt3)">-'+s.maxDrawdownPct+'%</div>'+
+      '</div>';
+  }
+  rows+=row(b,'rgba(255,255,255,.65)',true);
+  d.strategies.forEach(function(s){ rows+=row(s,COLORS[s.key]); });
+
+  // ベンチマークを上回った戦略があるかを明示する。なければその事実をはっきり書く
+  var beat=d.strategies.filter(function(s){return s.vsBenchmarkCagrPct!=null&&s.vsBenchmarkCagrPct>0;});
+  var verdict=beat.length
+    ? '<div class="cost-annual ok"><b>ベンチマークを上回った戦略あり</b>'+beat.map(function(s){return s.label+'（年率'+(s.vsBenchmarkCagrPct>0?'+':'')+s.vsBenchmarkCagrPct+'%）';}).join('、')+'。ただし下記の限界を踏まえて解釈してください。</div>'
+    : '<div class="cost-annual warn"><b>⚠️ どの戦略もベンチマークを上回りませんでした</b>売買コストを払ってスコアに従って売買するより、<b>何もせず全銘柄を持ち続けた方が結果が良かった</b>ことを意味します。</div>';
+
+  var caveats='<div class="sector-note" style="margin-top:8px">【この数字の限界】<br>'+
+    (d.caveats||[]).map(function(c){return '・'+c;}).join('<br>')+'</div>';
+
+  p.innerHTML=
+    '<div class="sector-note" style="margin-bottom:4px">元本100として、'+d.config.holdBars+'営業日ごとに入れ替えた場合の資産推移<br>'+
+    d.coverage.startDate+' 〜 '+d.coverage.endDate+'（'+d.coverage.stockCount+'銘柄・往復コスト'+d.config.roundTripPct+'%）</div>'+
+    legend+svg+rows+verdict+caveats;
 }
 
 function loadScanner(force) {

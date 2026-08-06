@@ -1,0 +1,46 @@
+name: シグナル通り売買した場合の資産推移（研究用・手動実行）
+
+# 「スコア通りにトレードしたら資産がどう推移したか」を算出し、
+# backtest/results/strategy-latest.json に出力する。
+# リポジトリ全体が静的配信されているため、アプリから直接読み込める。
+on:
+  workflow_dispatch:
+    inputs:
+      hold_bars:
+        description: '保有期間＝リバランス間隔（営業日）'
+        required: false
+        default: '20'
+      round_trip_pct:
+        description: '往復売買コスト(%)'
+        required: false
+        default: '0.30'
+
+permissions:
+  contents: write
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: シグナル戦略のシミュレーションを実行
+        env:
+          BT_HOLD_BARS: ${{ inputs.hold_bars }}
+          BT_ROUND_TRIP_PCT: ${{ inputs.round_trip_pct }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/simulate-signal-strategy.mjs
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: シグナル戦略の資産推移を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi

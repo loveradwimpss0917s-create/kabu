@@ -1,0 +1,56 @@
+name: シグナル退出方式のバックテスト（研究用・手動実行）
+
+# 固定20営業日リバランスではなく、スコアがENTRY_MIN以上でエントリー・EXIT_MIN未満で
+# 退出するヒステリシス方式をシミュレートし、backtest/results/signal-exit-latest.json に出力する。
+# 既存の simulate-signal-strategy.yml（固定リバランス方式）は変更しない。
+on:
+  workflow_dispatch:
+    inputs:
+      entry_min:
+        description: 'エントリー閾値（この点数以上でエントリー候補）'
+        required: false
+        default: '75'
+      exit_min:
+        description: '退出閾値（この点数未満で退出シグナル）'
+        required: false
+        default: '50'
+      fee_bps:
+        description: '片道手数料(bps)。run.mjsと同じ既定値'
+        required: false
+        default: '5'
+      slippage_bps:
+        description: '片道スリッページ(bps)。run.mjsと同じ既定値'
+        required: false
+        default: '10'
+
+permissions:
+  contents: write
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: シグナル退出方式のシミュレーションを実行
+        env:
+          BT_ENTRY_MIN: ${{ inputs.entry_min }}
+          BT_EXIT_MIN: ${{ inputs.exit_min }}
+          BT_FEE_BPS: ${{ inputs.fee_bps }}
+          BT_SLIPPAGE_BPS: ${{ inputs.slippage_bps }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: node backtest/simulate-signal-exit.mjs
+      - name: 結果をリポジトリにコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backtest/results/
+          if git diff --cached --quiet; then
+            echo "変更なし。コミットをスキップします"
+          else
+            git commit -m "chore: シグナル退出方式の資産推移を更新 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi
